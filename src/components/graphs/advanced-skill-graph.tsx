@@ -21,6 +21,7 @@ import {
   GitCompare,
   X,
   CheckCircle2,
+  Sparkles,
 } from "lucide-react";
 import { ForceGraph } from "./force-graph";
 import { cn } from "@/lib/utils";
@@ -275,16 +276,48 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
 }
 
 /** Side-by-side comparison of two people's skill profiles. Shows overlap
- *  (shared skills) and unique skills per person, per dimension. */
+ *  (shared skills) and unique skills per person, per dimension. Includes
+ *  a Jaccard similarity score per dimension (|shared| / |union|) and an
+ *  overall similarity headline. */
 function ComparePeopleCard({ people }: { people: [PersonSkillRecord, PersonSkillRecord] }) {
   const [a, b] = people;
-  const dims: { key: "sectors" | "problemTypes" | "tech" | "methodologies" | "roles"; label: string; color: string }[] = [
-    { key: "sectors", label: "Sectors", color: "text-sector" },
-    { key: "problemTypes", label: "Problem Types", color: "text-problem" },
-    { key: "tech", label: "Tech", color: "text-tech" },
-    { key: "methodologies", label: "Methodologies", color: "text-methodology" },
-    { key: "roles", label: "Roles", color: "text-role" },
+  const dims: { key: "sectors" | "problemTypes" | "tech" | "methodologies" | "roles"; label: string; color: string; barClass: string }[] = [
+    { key: "sectors", label: "Sectors", color: "text-sector", barClass: "bg-sector" },
+    { key: "problemTypes", label: "Problem Types", color: "text-problem", barClass: "bg-problem" },
+    { key: "tech", label: "Tech", color: "text-tech", barClass: "bg-tech" },
+    { key: "methodologies", label: "Methodologies", color: "text-methodology", barClass: "bg-methodology" },
+    { key: "roles", label: "Roles", color: "text-role", barClass: "bg-role" },
   ];
+
+  // Compute per-dimension Jaccard + overall
+  const dimStats = dims.map((dim) => {
+    const listA = a[dim.key];
+    const listB = b[dim.key];
+    const namesA = new Set(listA.map((s) => s.name));
+    const namesB = new Set(listB.map((s) => s.name));
+    const shared = listA.filter((s) => namesB.has(s.name));
+    const onlyA = listA.filter((s) => !namesB.has(s.name));
+    const onlyB = listB.filter((s) => !namesA.has(s.name));
+    const union = namesA.size + namesB.size - shared.length;
+    const jaccard = union > 0 ? shared.length / union : 0;
+    return { dim, shared, onlyA, onlyB, jaccard, union };
+  });
+
+  // Overall Jaccard across all dimensions
+  const allA = new Set<string>();
+  const allB = new Set<string>();
+  for (const d of dims) {
+    a[d.key].forEach((s) => allA.add(s.name));
+    b[d.key].forEach((s) => allB.add(s.name));
+  }
+  let sharedAll = 0;
+  for (const name of allA) if (allB.has(name)) sharedAll++;
+  const overallJaccard = allA.size + allB.size - sharedAll > 0
+    ? sharedAll / (allA.size + allB.size - sharedAll)
+    : 0;
+
+  const jaccardLabel = (j: number) =>
+    j >= 0.7 ? "Very similar" : j >= 0.4 ? "Moderately similar" : j >= 0.2 ? "Somewhat similar" : j > 0 ? "Mostly distinct" : "No overlap";
 
   return (
     <Card className="animate-fade-in-up">
@@ -294,10 +327,40 @@ function ComparePeopleCard({ people }: { people: [PersonSkillRecord, PersonSkill
           Skill Overlap
         </CardTitle>
         <CardDescription className="text-[11px]">
-          Shared skills (both people) vs unique skills per person
+          Shared skills vs unique skills per person, with Jaccard similarity (|shared| / |union|)
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 max-h-[560px] overflow-y-auto pr-1">
+        {/* Overall similarity headline */}
+        <div className="rounded-lg border bg-gradient-to-br from-primary/5 to-transparent p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+              <Sparkles className="h-3 w-3" />
+              Overall skill similarity
+            </span>
+            <span className={cn(
+              "text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded",
+              overallJaccard >= 0.4 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+            )}>
+              {jaccardLabel(overallJaccard)}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-mono font-bold tabular-nums">
+              {(overallJaccard * 100).toFixed(0)}<span className="text-base text-muted-foreground">%</span>
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              {sharedAll} shared · {allA.size + allB.size - sharedAll} total unique
+            </span>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-primary/70 to-primary transition-all"
+              style={{ width: `${overallJaccard * 100}%` }}
+            />
+          </div>
+        </div>
+
         {/* Header row with both avatars */}
         <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center pb-2 border-b">
           <div className="flex items-center gap-2 min-w-0">
@@ -323,22 +386,28 @@ function ComparePeopleCard({ people }: { people: [PersonSkillRecord, PersonSkill
           </div>
         </div>
 
-        {dims.map((dim) => {
-          const listA = a[dim.key];
-          const listB = b[dim.key];
-          const namesA = new Set(listA.map((s) => s.name));
-          const namesB = new Set(listB.map((s) => s.name));
-          const shared = listA.filter((s) => namesB.has(s.name));
-          const onlyA = listA.filter((s) => !namesB.has(s.name));
-          const onlyB = listB.filter((s) => !namesA.has(s.name));
+        {dimStats.map(({ dim, shared, onlyA, onlyB, jaccard, union }) => {
           if (shared.length === 0 && onlyA.length === 0 && onlyB.length === 0) return null;
           return (
             <div key={dim.key} className="space-y-1.5">
-              <div className={cn("text-[11px] font-medium flex items-center justify-between", dim.color)}>
-                <span>{dim.label}</span>
-                <span className="text-[9px] text-muted-foreground font-normal">
-                  {shared.length} shared · {onlyA.length}/{onlyB.length} unique
+              <div className="flex items-center justify-between gap-2">
+                <span className={cn("text-[11px] font-medium flex items-center gap-1.5", dim.color)}>
+                  {dim.label}
                 </span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-16 h-1 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={cn("h-full", dim.barClass)}
+                      style={{ width: `${jaccard * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[9px] font-mono text-muted-foreground tabular-nums w-9 text-right">
+                    {(jaccard * 100).toFixed(0)}%
+                  </span>
+                  <span className="text-[9px] text-muted-foreground/70 font-normal">
+                    · {shared.length}/{union}
+                  </span>
+                </div>
               </div>
               {shared.length > 0 && (
                 <div className="space-y-0.5">

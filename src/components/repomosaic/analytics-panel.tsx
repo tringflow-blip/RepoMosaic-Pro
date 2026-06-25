@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Compass,
   Target,
@@ -103,6 +104,9 @@ export function AnalyticsPanel({ skillMap }: Props) {
 
       {/* Skill co-occurrence */}
       <SkillCoOccurrenceCard skillMap={skillMap} />
+
+      {/* Skill coverage matrix — heatmap of people × top skills */}
+      <SkillCoverageMatrix skillMap={skillMap} />
     </div>
   );
 }
@@ -180,22 +184,54 @@ function OrgSummaryStrip({ skillMap }: { skillMap: AdvancedSkillMap }) {
 
   return (
     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-      {stats.map((s) => (
-        <Card key={s.label} className="overflow-hidden">
-          <CardContent className="p-3">
+      {stats.map((s, i) => (
+        <Card key={s.label} className="overflow-hidden relative group">
+          <div className={cn("absolute inset-x-0 top-0 h-0.5", getAccentForLabel(s.label))} />
+          <CardContent className="p-3 pt-3">
             <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
               {s.icon}
               {s.label}
             </div>
-            <div className={cn("font-mono font-semibold truncate", s.isText ? "text-sm" : "text-xl tabular-nums")}>
+            <div
+              className={cn(
+                "font-mono font-semibold truncate transition-transform group-hover:-translate-y-0.5",
+                s.isText ? "text-sm" : "text-xl tabular-nums"
+              )}
+              title={String(s.value)}
+            >
               {s.value}
             </div>
-            <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{s.sub}</div>
+            <div className="text-[10px] text-muted-foreground mt-0.5 truncate" title={s.sub}>{s.sub}</div>
+            {i === 0 && skillMap.totalPeople > 0 && (
+              <div className="mt-1.5 flex -space-x-1.5">
+                {skillMap.people.slice(0, 5).map((p) => (
+                  <Avatar key={p.login} className="h-4 w-4 border border-card rounded-full">
+                    <AvatarImage src={p.avatarUrl} />
+                    <AvatarFallback className="text-[7px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                ))}
+                {skillMap.people.length > 5 && (
+                  <span className="h-4 w-4 rounded-full bg-muted border border-card flex items-center justify-center text-[7px] font-mono">
+                    +{skillMap.people.length - 5}
+                  </span>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
     </div>
   );
+}
+
+function getAccentForLabel(label: string): string {
+  if (/people/i.test(label)) return "bg-people";
+  if (/commits/i.test(label)) return "bg-muted-foreground/40";
+  if (/chunks/i.test(label)) return "bg-primary";
+  if (/skills/i.test(label)) return "bg-sector";
+  if (/diverse/i.test(label)) return "bg-amber-500";
+  if (/sector/i.test(label)) return "bg-sector";
+  return "bg-primary";
 }
 
 /** Compute and display which skills tend to co-occur in the same chunks.
@@ -288,38 +324,225 @@ function LeaderboardCard({
   items: { name: string; score: number; commits: number; people: number }[];
 }) {
   const max = Math.max(1, ...items.map((i) => i.commits));
+  const totalCommits = items.reduce((sum, i) => sum + i.commits, 0);
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           {icon}
           {title}
         </CardTitle>
         <CardDescription className="text-[11px] flex items-center gap-1">
-          <TrendingUp className="h-3 w-3" /> {items.length} tags detected across the org
+          <TrendingUp className="h-3 w-3" /> {items.length} tags · {totalCommits} total commits
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-1.5 max-h-[260px] overflow-y-auto pr-1">
+      <CardContent className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
         {items.length === 0 && (
           <div className="text-sm text-muted-foreground text-center py-4">No tags yet.</div>
         )}
-        {items.map((item, i) => (
-          <div key={item.name} className="flex items-center gap-2 text-[11px]">
-            <span className="font-mono text-muted-foreground w-4">{i + 1}</span>
-            <span className="font-medium flex-1 truncate" title={item.name}>
-              {item.name}
-            </span>
-            <span className="text-muted-foreground font-mono text-[10px] whitespace-nowrap">
-              {item.people}p · {item.commits}c
-            </span>
-            <div className="w-20 h-1.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className={cn("h-full", accent)}
-                style={{ width: `${(item.commits / max) * 100}%` }}
-              />
+        {items.map((item, i) => {
+          const pctOfMax = (item.commits / max) * 100;
+          const pctOfTotal = totalCommits > 0 ? (item.commits / totalCommits) * 100 : 0;
+          return (
+            <div
+              key={item.name}
+              className="group flex items-center gap-2 text-[11px] py-1 px-1 rounded hover:bg-muted/40 -mx-1 transition-colors"
+            >
+              <span className="font-mono text-muted-foreground w-4 text-right tabular-nums">{i + 1}</span>
+              <span className="font-medium flex-1 truncate" title={item.name}>
+                {item.name}
+              </span>
+              <span className="text-muted-foreground font-mono text-[10px] whitespace-nowrap tabular-nums">
+                {item.people}p · {item.commits}c
+              </span>
+              <span className="text-muted-foreground/80 font-mono text-[9px] w-9 text-right tabular-nums">
+                {pctOfTotal.toFixed(0)}%
+              </span>
+              <div className="w-20 h-2 rounded-full bg-muted overflow-hidden shrink-0 relative">
+                <div
+                  className={cn("h-full transition-all group-hover:brightness-110", accent)}
+                  style={{ width: `${pctOfMax}%` }}
+                />
+              </div>
             </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Interactive heatmap of people × top skills across a chosen dimension.
+ *  Each cell shows commit volume for that (person, skill) pair, with color
+ *  intensity scaled to the max in the matrix. Clicking a row/column header
+ *  pins it for closer inspection. */
+function SkillCoverageMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
+  const [dimension, setDimension] = useState<SkillDimension>("sector");
+  const [pinnedSkill, setPinnedSkill] = useState<string | null>(null);
+
+  const { people, skills, matrix, maxCell } = useMemo(() => {
+    // Pick the right org-wide list for the active dimension
+    const orgList =
+      dimension === "sector" ? skillMap.orgSectors :
+      dimension === "problemType" ? skillMap.orgProblemTypes :
+      dimension === "tech" ? skillMap.orgTech :
+      dimension === "methodology" ? skillMap.orgMethodologies : skillMap.orgRoles;
+
+    const skills = orgList.slice(0, 12).map((s) => s.name);
+
+    // Build matrix[personIndex][skillIndex] = commit count
+    const people = skillMap.people.slice(0, 12);
+    const matrix: number[][] = people.map((p) => {
+      const list =
+        dimension === "sector" ? p.sectors :
+        dimension === "problemType" ? p.problemTypes :
+        dimension === "tech" ? p.tech :
+        dimension === "methodology" ? p.methodologies : p.roles;
+      const lookup = new Map(list.map((s) => [s.name, s.commits]));
+      return skills.map((sk) => lookup.get(sk) ?? 0);
+    });
+
+    const maxCell = Math.max(1, ...matrix.flat());
+    return { people, skills, matrix, maxCell };
+  }, [skillMap, dimension]);
+
+  if (people.length === 0 || skills.length === 0) return null;
+
+  const accentVar =
+    dimension === "sector" ? "var(--sector)" :
+    dimension === "problemType" ? "var(--problem)" :
+    dimension === "tech" ? "var(--tech)" :
+    dimension === "methodology" ? "var(--methodology)" : "var(--role)";
+
+  const dimLabel =
+    dimension === "problemType" ? "Problem Types" : `${dimension.charAt(0).toUpperCase() + dimension.slice(1)}s`;
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Layers className="h-4 w-4 text-primary" />
+              Skill Coverage Matrix
+            </CardTitle>
+            <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
+              <TrendingUp className="h-3 w-3" />
+              Heatmap of {people.length} top contributors × top {skills.length} {dimLabel.toLowerCase()} · darker = more commits
+            </CardDescription>
           </div>
-        ))}
+          <Tabs value={dimension} onValueChange={(v) => { setDimension(v as SkillDimension); setPinnedSkill(null); }}>
+            <TabsList className="h-8">
+              {([
+                { k: "sector", l: "Sector" },
+                { k: "problemType", l: "Problem" },
+                { k: "tech", l: "Tech" },
+                { k: "methodology", l: "Method" },
+                { k: "role", l: "Role" },
+              ] as { k: SkillDimension; l: string }[]).map((d) => (
+                <TabsTrigger key={d.k} value={d.k} className="text-[10px] px-2 h-7">
+                  {d.l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <table className="w-full border-separate border-spacing-1">
+          <thead>
+            <tr>
+              <th className="sticky left-0 z-10 bg-card p-1.5 text-left text-[10px] font-medium text-muted-foreground min-w-[120px]">
+                Person
+              </th>
+              {skills.map((s) => (
+                <th
+                  key={s}
+                  className={cn(
+                    "p-1.5 text-[9px] font-medium cursor-pointer transition-colors rounded select-none",
+                    pinnedSkill === s ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+                  )}
+                  onClick={() => setPinnedSkill(pinnedSkill === s ? null : s)}
+                  title={`Click to pin ${s}`}
+                >
+                  <div className="writing-vertical-rl rotate-180 truncate max-h-[80px] mx-auto" style={{ writingMode: "vertical-rl" }}>
+                    {s}
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {people.map((p, ri) => (
+              <tr key={p.login}>
+                <td className="sticky left-0 z-10 bg-card p-1.5 text-[10px] font-medium whitespace-nowrap">
+                  <div className="flex items-center gap-1.5">
+                    <Avatar className="h-5 w-5 shrink-0">
+                      <AvatarImage src={p.avatarUrl} />
+                      <AvatarFallback className="text-[8px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                    </Avatar>
+                    <span className="truncate max-w-[100px]" title={p.name || p.login}>{p.name || p.login}</span>
+                  </div>
+                </td>
+                {skills.map((s, ci) => {
+                  const v = matrix[ri][ci];
+                  const intensity = v / maxCell;
+                  const isPinned = pinnedSkill === s;
+                  return (
+                    <td
+                      key={s}
+                      className={cn(
+                        "p-0 text-center align-middle transition-all",
+                        isPinned && "ring-2 ring-primary/40 ring-offset-1 ring-offset-card rounded"
+                      )}
+                      title={`${p.name || p.login} · ${s}: ${v} commits`}
+                    >
+                      <div
+                        className="h-9 min-w-[36px] rounded flex items-center justify-center text-[10px] font-mono font-semibold tabular-nums cursor-pointer hover:scale-105 transition-transform"
+                        style={{
+                          backgroundColor: v === 0
+                            ? "var(--muted)"
+                            : `color-mix(in oklch, ${accentVar} ${15 + intensity * 70}%, var(--card))`,
+                          color: v === 0
+                            ? "transparent"
+                            : intensity > 0.5
+                              ? "oklch(0.99 0 0)"
+                              : "var(--foreground)",
+                        }}
+                      >
+                        {v === 0 ? "·" : v}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span>Low</span>
+            <div className="flex">
+              {[0.1, 0.3, 0.5, 0.7, 0.9].map((i) => (
+                <div
+                  key={i}
+                  className="h-3 w-5"
+                  style={{ backgroundColor: `color-mix(in oklch, ${accentVar} ${15 + i * 70}%, var(--card))` }}
+                />
+              ))}
+            </div>
+            <span>High · {maxCell}c max</span>
+          </div>
+          {pinnedSkill && (
+            <button
+              type="button"
+              onClick={() => setPinnedSkill(null)}
+              className="hover:text-foreground transition-colors"
+            >
+              Clear pin ({pinnedSkill}) ×
+            </button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -3,7 +3,8 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, CheckCircle2, AlertCircle, Cpu, Layers, GitCommit, Gauge, Zap } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, CheckCircle2, AlertCircle, Cpu, Layers, GitCommit, Gauge, Zap, Download, FileText } from "lucide-react";
 
 export type ScanStatus = {
   id: string;
@@ -22,6 +23,8 @@ export type ScanStatus = {
   totalChunks: number;
   doneChunks: number;
   failedChunks?: number; // chunks where LLM analysis failed (after retries)
+  startedAt?: number;
+  finishedAt?: number | null;
   result: unknown | null;
   error: string | null;
 };
@@ -48,6 +51,15 @@ export function ScanProgressPanel({ status }: Props) {
   const okChunks = status.doneChunks - failedChunks;
   const qualityPct = status.doneChunks > 0 ? Math.round((okChunks / status.doneChunks) * 100) : 100;
   const hasFailures = failedChunks > 0;
+  const durationSec = status.startedAt
+    ? Math.round(((status.finishedAt ?? Date.now()) - status.startedAt) / 1000)
+    : 0;
+
+  const downloadLog = (format: "text" | "json") => {
+    if (!status.id) return;
+    const url = `/api/scan/log?id=${encodeURIComponent(status.id)}&format=${format}`;
+    window.open(url, "_blank");
+  };
 
   return (
     <Card>
@@ -77,6 +89,11 @@ export function ScanProgressPanel({ status }: Props) {
               <Badge variant="outline" className="text-[10px] font-mono py-0">
                 {status.provider}
               </Badge>
+              {durationSec > 0 && (
+                <Badge variant="outline" className="text-[10px] font-mono py-0">
+                  {durationSec}s
+                </Badge>
+              )}
             </CardDescription>
           </div>
           <div className="text-right">
@@ -147,6 +164,31 @@ export function ScanProgressPanel({ status }: Props) {
                 All chunks analyzed successfully.
               </div>
             )}
+            {/* Download scan log — only show after some chunks have run */}
+            <div className="flex items-center gap-2 pt-1 border-t">
+              <span className="text-[10px] text-muted-foreground flex items-center gap-1 mr-auto">
+                <FileText className="h-3 w-3" />
+                Debug log
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px] px-2"
+                onClick={() => downloadLog("text")}
+                disabled={!status.id}
+              >
+                <Download className="h-3 w-3 mr-1" /> .log
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-[11px] px-2"
+                onClick={() => downloadLog("json")}
+                disabled={!status.id}
+              >
+                <Download className="h-3 w-3 mr-1" /> .json
+              </Button>
+            </div>
           </div>
         )}
 
@@ -182,3 +224,4 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 function cn(...classes: (string | false | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
 }
+

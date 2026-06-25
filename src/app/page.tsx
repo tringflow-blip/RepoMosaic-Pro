@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Github,
   Sparkles,
@@ -22,6 +23,7 @@ import { RepoListPanel } from "@/components/repomosaic/repo-list-panel";
 import { ScanProgressPanel, type ScanStatus } from "@/components/repomosaic/scan-progress-panel";
 import { AnalyticsPanel } from "@/components/repomosaic/analytics-panel";
 import { AdvancedSkillGraph } from "@/components/graphs/advanced-skill-graph";
+import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
 import type { AdvancedSkillMap } from "@/lib/analysis/skill-taxonomy";
 import type { RepoInfo } from "@/lib/github/client";
@@ -430,82 +432,80 @@ function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: strin
 }
 
 function PeopleTable({ skillMap }: { skillMap: AdvancedSkillMap }) {
+  const maxCommits = Math.max(1, ...skillMap.people.map((p) => p.totalCommits));
   return (
-    <div className="rounded-lg border overflow-hidden">
+    <div className="rounded-lg border overflow-hidden bg-card">
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead className="bg-muted/50">
+          <thead className="bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
             <tr className="text-left">
-              <th className="p-2 font-medium">Person</th>
-              <th className="p-2 font-medium">Commits</th>
-              <th className="p-2 font-medium">Chunks</th>
-              <th className="p-2 font-medium">Repos</th>
-              <th className="p-2 font-medium text-sector">Sectors</th>
-              <th className="p-2 font-medium text-problem">Problem Types</th>
-              <th className="p-2 font-medium text-tech">Tech</th>
-              <th className="p-2 font-medium text-methodology">Methodologies</th>
-              <th className="p-2 font-medium text-role">Roles</th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[180px]">
+                Person
+              </th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[100px]">
+                Commits
+              </th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px]">
+                Chunks
+              </th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px]">
+                Repos
+              </th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-sector">Sectors</th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-problem">Problem Types</th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-tech">Tech</th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-methodology">Methodologies</th>
+              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-role">Roles</th>
             </tr>
           </thead>
           <tbody>
-            {skillMap.people.map((p) => (
-              <tr key={p.login} className="border-t hover:bg-muted/30">
-                <td className="p-2">
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium truncate max-w-[140px]">{p.name || p.login}</span>
-                    <span className="text-muted-foreground text-[10px]">@{p.login}</span>
-                  </div>
-                </td>
-                <td className="p-2 font-mono">{p.totalCommits}</td>
-                <td className="p-2 font-mono">{p.totalChunks}</td>
-                <td className="p-2 font-mono">{p.repos.length}</td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-1 max-w-[220px]">
-                    {p.sectors.slice(0, 3).map((s) => (
-                      <Badge key={s.name} variant="outline" className="text-[9px] py-0 border-sector/30 text-sector">
-                        {s.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-1 max-w-[220px]">
-                    {p.problemTypes.slice(0, 3).map((s) => (
-                      <Badge key={s.name} variant="outline" className="text-[9px] py-0 border-problem/30 text-problem">
-                        {s.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-1 max-w-[220px]">
-                    {p.tech.slice(0, 4).map((s) => (
-                      <Badge key={s.name} variant="outline" className="text-[9px] py-0 border-tech/30 text-tech">
-                        {s.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-1 max-w-[220px]">
-                    {p.methodologies.slice(0, 3).map((s) => (
-                      <Badge key={s.name} variant="outline" className="text-[9px] py-0 border-methodology/30 text-methodology">
-                        {s.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </td>
-                <td className="p-2">
-                  <div className="flex flex-wrap gap-1 max-w-[220px]">
-                    {p.roles.slice(0, 3).map((s) => (
-                      <Badge key={s.name} variant="outline" className="text-[9px] py-0 border-role/30 text-role">
-                        {s.name}
-                      </Badge>
-                    ))}
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {skillMap.people.map((p) => {
+              const pct = (p.totalCommits / maxCommits) * 100;
+              return (
+                <tr key={p.login} className="border-t hover:bg-muted/30 transition-colors group">
+                  <td className="p-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar className="h-8 w-8 shrink-0">
+                        <AvatarImage src={p.avatarUrl} />
+                        <AvatarFallback className="text-[10px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                      </Avatar>
+                      <div className="min-w-0">
+                        <div className="font-medium truncate max-w-[140px]" title={p.name || p.login}>
+                          {p.name || p.login}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground truncate">@{p.login}</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-2.5">
+                    <div className="font-mono font-semibold tabular-nums">{p.totalCommits}</div>
+                    <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden w-[80px]">
+                      <div
+                        className="h-full bg-people transition-all group-hover:brightness-110"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </td>
+                  <td className="p-2.5 font-mono tabular-nums text-muted-foreground">{p.totalChunks}</td>
+                  <td className="p-2.5 font-mono tabular-nums text-muted-foreground">{p.repos.length}</td>
+                  <td className="p-2.5">
+                    <SkillChipList items={p.sectors} variant="sector" max={3} />
+                  </td>
+                  <td className="p-2.5">
+                    <SkillChipList items={p.problemTypes} variant="problem" max={3} />
+                  </td>
+                  <td className="p-2.5">
+                    <SkillChipList items={p.tech} variant="tech" max={4} />
+                  </td>
+                  <td className="p-2.5">
+                    <SkillChipList items={p.methodologies} variant="methodology" max={3} />
+                  </td>
+                  <td className="p-2.5">
+                    <SkillChipList items={p.roles} variant="role" max={3} />
+                  </td>
+                </tr>
+              );
+            })}
             {skillMap.people.length === 0 && (
               <tr>
                 <td colSpan={9} className="p-6 text-center text-muted-foreground">
@@ -516,6 +516,52 @@ function PeopleTable({ skillMap }: { skillMap: AdvancedSkillMap }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+type SkillVariant = "sector" | "problem" | "tech" | "methodology" | "role";
+
+function SkillChipList({
+  items,
+  variant,
+  max = 3,
+}: {
+  items: { name: string }[];
+  variant: SkillVariant;
+  max?: number;
+}) {
+  if (items.length === 0) {
+    return <div className="text-[10px] text-muted-foreground/40 italic">—</div>;
+  }
+  const shown = items.slice(0, max);
+  const overflow = items.length - shown.length;
+  const cls: Record<SkillVariant, string> = {
+    sector: "border-sector/30 text-sector bg-sector/5",
+    problem: "border-problem/30 text-problem bg-problem/5",
+    tech: "border-tech/30 text-tech bg-tech/5",
+    methodology: "border-methodology/30 text-methodology bg-methodology/5",
+    role: "border-role/30 text-role bg-role/5",
+  };
+  return (
+    <div className="flex flex-wrap gap-1 max-w-[220px]">
+      {shown.map((s) => (
+        <span
+          key={s.name}
+          className={cn(
+            "inline-block text-[10px] px-1.5 py-0.5 rounded border font-medium",
+            cls[variant]
+          )}
+          title={s.name}
+        >
+          {s.name}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="inline-block text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground font-mono">
+          +{overflow}
+        </span>
+      )}
     </div>
   );
 }

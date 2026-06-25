@@ -14,6 +14,8 @@ import {
 } from "@/lib/github/client";
 import {
   extractSkillsForChunk,
+  setChunkContext,
+  drainRetryEvents,
   type LLMConfig,
 } from "@/lib/llm/skill-extractor";
 import { aggregateSkillMap } from "@/lib/analysis/advanced-skill-map";
@@ -23,6 +25,18 @@ export const runtime = "nodejs";
 export const maxDuration = 600; // 10 min — long scan
 
 /** In-memory job registry (single-process dev server). */
+type ChunkEvent = {
+  chunkId: string;
+  repo: string;
+  author: string;
+  status: "ok" | "failed";
+  model: string;
+  provider: string;
+  error?: string;
+  tags: number;
+  timestamp: number;
+};
+
 type ScanJob = {
   id: string;
   org: string;
@@ -40,9 +54,12 @@ type ScanJob = {
   totalChunks: number;
   doneChunks: number;
   failedChunks: number; // chunks where LLM analysis failed (after retries)
+  chunkEvents: ChunkEvent[]; // per-chunk outcome log for the scan-log export
+  retryLog: { chunkId: string; attempt: number; error: string; timestamp: number }[];
   result: unknown | null;
   error: string | null;
   startedAt: number;
+  finishedAt: number | null;
 };
 
 // Persist across HMR reloads in dev
@@ -198,6 +215,8 @@ async function runScan(jobId: string, params: {
             const chunkId = `${repo.name}:${branch}:${authorKey}:${ci}`;
             job.totalChunks += 1;
             const firstCommit = chunk[0];
+            // Set the chunk context so retry events get attributed here
+            const resetCtx = setChunkContext(chunkId);
             try {
               const ext = await extractSkillsForChunk(params.llmConfig, {
                 chunkId,
@@ -219,11 +238,45 @@ async function runScan(jobId: string, params: {
               }
               lastModel = ext.model;
               lastProvider = ext.provider;
+              // Drain any retry events that occurred during this chunk's LLM call
+              const retries = drainRetryEvents(chunkId);
+              if (retries.length > 0) {
+                job.retryLog.push(...retries);
+              }
+              // Record this chunk's outcome in the event log
+              job.chunkEvents.push({
+                chunkId,
+                repo: repo.name,
+                author: firstCommit.author,
+                status: ext.failed ? "failed" : "ok",
+                model: ext.model,
+                provider: ext.provider,
+                tags: ext.tags.length,
+                timestamp: Date.now(),
+              });
             } catch (err) {
               // extractSkillsForChunk has its own retry + fallback, so this
               // catch is only for truly unexpected errors (e.g. bad input).
               console.error(`Chunk ${chunkId} crashed:`, (err as Error).message);
               job.failedChunks += 1;
+              // Drain any retry events that occurred during this chunk's LLM call
+              const retries = drainRetryEvents(chunkId);
+              if (retries.length > 0) {
+                job.retryLog.push(...retries);
+              }
+              job.chunkEvents.push({
+                chunkId,
+                repo: repo.name,
+                author: firstCommit.author,
+                status: "failed",
+                model: lastModel,
+                provider: lastProvider,
+                error: (err as Error).message.slice(0, 200),
+                tags: 0,
+                timestamp: Date.now(),
+              });
+            } finally {
+              resetCtx();
             }
             job.doneChunks += 1;
             job.progress = Math.round(((ri + (ci + 1) / chunks.length) / selected.length) * 100);
@@ -256,6 +309,7 @@ async function runScan(jobId: string, params: {
     job.result = skillMap;
     job.status = "completed";
     job.progress = 100;
+    job.finishedAt = Date.now();
     const okChunks = extractions.length - job.failedChunks;
     job.message = job.failedChunks > 0
       ? `Done — ${selected.length} repos, ${totalCommits} commits, ${okChunks}/${extractions.length} chunks OK (${job.failedChunks} failed), ${skillMap.totalPeople} people`
@@ -305,6 +359,7 @@ async function runScan(jobId: string, params: {
     job.status = "failed";
     job.error = (err as Error).message;
     job.message = `Failed: ${(err as Error).message}`;
+    job.finishedAt = Date.now();
   }
 }
 
@@ -361,9 +416,12 @@ export async function POST(req: Request) {
       totalChunks: 0,
       doneChunks: 0,
       failedChunks: 0,
+      chunkEvents: [],
+      retryLog: [],
       result: null,
       error: null,
       startedAt: Date.now(),
+      finishedAt: null,
     };
     JOBS.set(id, job);
 

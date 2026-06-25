@@ -120,7 +120,7 @@ export function ForceGraph({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.w, size.h);
 
-    // Edges
+    // Edges — base layer is faint, highlighted edges glow
     ctx.lineWidth = 1;
     for (const e of edgesRef.current) {
       if (!e.source.x || !e.source.y || !e.target.x || !e.target.y) continue;
@@ -129,64 +129,101 @@ export function ForceGraph({
         hoverRef.current === e.target.id ||
         selectedRef.current === e.source.id ||
         selectedRef.current === e.target.id;
-      ctx.strokeStyle = isHi ? "oklch(0.5 0.10 75 / 0.55)" : "oklch(0.5 0 0 / 0.10)";
-      ctx.lineWidth = isHi ? 1.6 : 1;
+      ctx.strokeStyle = isHi ? "oklch(0.5 0.10 75 / 0.65)" : "oklch(0.5 0 0 / 0.14)";
+      ctx.lineWidth = isHi ? 2 : 1;
       ctx.beginPath();
       ctx.moveTo(e.source.x, e.source.y);
       ctx.lineTo(e.target.x, e.target.y);
       ctx.stroke();
     }
 
-    // Nodes
+    // Nodes — render with shadow for depth, full opacity for strong contrast
     for (const n of nodesRef.current) {
       if (!n.x || !n.y) continue;
       const isHi = hoverRef.current === n.id || selectedRef.current === n.id;
       const r = n.r + (isHi ? 2 : 0);
 
-      // Glow on hover
+      // Soft outer glow on hover/selected
       if (isHi) {
+        ctx.save();
+        ctx.shadowColor = n.color;
+        ctx.shadowBlur = 16;
         ctx.beginPath();
-        ctx.arc(n.x, n.y, r + 6, 0, Math.PI * 2);
-        ctx.fillStyle = n.color.replace("oklch(", "oklch(").replace(/[\d.]+\)/, "0.12)");
+        ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = n.color;
         ctx.fill();
+        ctx.restore();
       }
 
+      // Subtle drop shadow for depth on every node
+      ctx.save();
+      ctx.shadowColor = "oklch(0.20 0 0 / 0.18)";
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 1.5;
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
       ctx.fillStyle = n.color;
-      ctx.globalAlpha = isHi ? 1 : 0.85;
+      ctx.globalAlpha = isHi ? 1 : 0.96;
       ctx.fill();
+      ctx.restore();
       ctx.globalAlpha = 1;
-      ctx.lineWidth = isHi ? 2 : 1;
-      ctx.strokeStyle = isHi ? "oklch(0.20 0 0 / 0.85)" : "oklch(0.30 0 0 / 0.25)";
+
+      // Crisp ring border
+      ctx.lineWidth = isHi ? 2.5 : 1.2;
+      ctx.strokeStyle = isHi ? "oklch(0.15 0 0 / 0.92)" : "oklch(1 0 0 / 0.85)";
       ctx.stroke();
 
       // Avatar initials for person nodes
       if (n.type === "person" && n.label) {
         ctx.fillStyle = "oklch(0.99 0 0)";
-        ctx.font = `${Math.max(9, Math.min(13, r * 0.7))}px ui-sans-serif, system-ui, sans-serif`;
+        ctx.font = `600 ${Math.max(9, Math.min(13, r * 0.7))}px ui-sans-serif, system-ui, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(n.label[0]?.toUpperCase() ?? "?", n.x, n.y);
       }
     }
 
-    // Labels
+    // Labels — rounded pill background with proper padding
     if (showLabels) {
-      ctx.font = "11px ui-sans-serif, system-ui, sans-serif";
+      ctx.font = "600 11px ui-sans-serif, system-ui, sans-serif";
       ctx.textAlign = "center";
-      ctx.textBaseline = "top";
+      ctx.textBaseline = "middle";
       for (const n of nodesRef.current) {
         if (!n.x || !n.y) continue;
         const isHi = hoverRef.current === n.id || selectedRef.current === n.id;
         // Only label skill nodes (person nodes are too many) or hovered/selected
         if (n.type === "skill" || isHi) {
           const text = n.label.length > 22 ? n.label.slice(0, 21) + "…" : n.label;
-          const w = ctx.measureText(text).width + 8;
-          ctx.fillStyle = isHi ? "oklch(0.20 0 0 / 0.92)" : "oklch(0.30 0 0 / 0.70)";
-          ctx.fillRect(n.x - w / 2, n.y + n.r + 4, w, 16);
-          ctx.fillStyle = "oklch(0.99 0 0)";
-          ctx.fillText(text, n.x, n.y + n.r + 6);
+          const padX = 7;
+          const w = ctx.measureText(text).width + padX * 2;
+          const h = 17;
+          const lx = n.x - w / 2;
+          const ly = n.y + n.r + 5;
+
+          // Rounded rect background
+          const radius = 4;
+          ctx.beginPath();
+          ctx.moveTo(lx + radius, ly);
+          ctx.lineTo(lx + w - radius, ly);
+          ctx.quadraticCurveTo(lx + w, ly, lx + w, ly + radius);
+          ctx.lineTo(lx + w, ly + h - radius);
+          ctx.quadraticCurveTo(lx + w, ly + h, lx + w - radius, ly + h);
+          ctx.lineTo(lx + radius, ly + h);
+          ctx.quadraticCurveTo(lx, ly + h, lx, ly + h - radius);
+          ctx.lineTo(lx, ly + radius);
+          ctx.quadraticCurveTo(lx, ly, lx + radius, ly);
+          ctx.closePath();
+
+          if (isHi) {
+            ctx.fillStyle = "oklch(0.15 0 0 / 0.95)";
+            ctx.fill();
+            ctx.fillStyle = "oklch(0.99 0 0)";
+          } else {
+            ctx.fillStyle = "oklch(0.20 0 0 / 0.82)";
+            ctx.fill();
+            ctx.fillStyle = "oklch(0.99 0 0)";
+          }
+          ctx.fillText(text, n.x, ly + h / 2 + 0.5);
         }
       }
     }

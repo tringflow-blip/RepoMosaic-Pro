@@ -314,3 +314,176 @@ Unresolved / Next-phase recommendations:
   |union|) per dimension for a quantitative overlap measure.
 - Consider adding a "download scan log" button for debugging failed chunks.
 - The co-occurrence panel could be enhanced into an interactive heatmap.
+
+---
+Task ID: 5
+Agent: main (cron webDevReview)
+Task: QA assessment + styling polish (force graph, People table, Analytics leaderboards) + new features (Jaccard similarity, Skill Coverage Matrix, scan log export) per the 15-min cron review cycle.
+
+## QA Assessment
+- Loaded the app via agent-browser, re-authenticated with the GitHub token,
+  and verified the cached Gaia-Recipe scan (268 commits, 49 chunks, 6 people)
+  loads correctly from the SQLite cache.
+- Used VLM (z-ai vision CLI) to analyze screenshots of all 3 main tabs
+  (Skill Graph, People, Analytics) and identified visual issues:
+  · Skill Graph: nodes had low opacity (0.85) making them washed out on light
+    background; labels used flat rectangles with poor padding.
+  · People table: usernames truncated ("BroccoBae Deve..."), no avatars,
+    no sticky header, no commit-count visualization, plain badge styling.
+  · Analytics leaderboards: bars had no % labels, brown vs green colors
+    looked similar in tone, no hover state on rows.
+  · OrgSummaryStrip: "Most diverse" stat truncated names with no avatar
+    visual cue.
+- Tested all existing features: Setup → auth → owner resolve → Repos →
+  Scan → Skill Graph → People → Analytics. All working from cache.
+
+## Bug Fixes
+- None critical. The Scan Log API initially crashed on old in-memory jobs
+  that predated the `chunkEvents` field — fixed with defensive defaults
+  (`job.chunkEvents ?? []`, etc.) so old jobs log "(no chunk events
+  recorded — this scan predates the event log feature)" instead of 500ing.
+
+## New Features
+
+1. **Jaccard similarity in Compare People card** (`advanced-skill-graph.tsx`):
+   - Computes per-dimension Jaccard index (|shared| / |union|) and an
+     overall Jaccard across all 5 dimensions.
+   - Headline "Overall skill similarity" card with big % number, semantic
+     label ("Very similar" / "Moderately similar" / "Somewhat similar" /
+     "Mostly distinct" / "No overlap"), gradient progress bar, and
+     "X shared · Y total unique" subtext.
+   - Each dimension row now shows a mini progress bar + Jaccard % + "X/Y"
+     (shared/union) next to the dimension name.
+   - Verified: comparing jolinajavier02 vs Yena shows 33% overall similarity
+     ("Somewhat similar"), 14 shared · 43 total unique, with per-dimension
+     bars (Sectors: 13%, etc.).
+
+2. **Skill Coverage Matrix** (`analytics-panel.tsx`):
+   - New heatmap component at the bottom of the Analytics tab.
+   - Shows top 12 contributors (rows) × top 12 skills (columns) for the
+     active dimension.
+   - Dimension tabs (Sector/Problem/Tech/Method/Role) switch the matrix.
+   - Cells colored via `color-mix(in oklch, var(--dim) N%, var(--card))`
+     where N scales with commit intensity (15% → 85%).
+   - Cell text shows commit count (white on dark cells, foreground on light).
+   - Clicking a column header pins it (ring highlight) for inspection.
+   - Color legend at bottom (Low → High gradient with max commit count).
+   - Sticky first column with person avatar + name.
+   - Vertical-rl text for column headers to fit long skill names.
+   - Verified: Sector dimension shows jolinajavier02 with 113 commits on
+     E-commerce (darkest cell), Yena with 12 commits on Media/Content.
+
+3. **Scan log export** (`/api/scan/log` + `scan-progress-panel.tsx`):
+   - New API endpoint `GET /api/scan/log?id=...&format=text|json` that
+     exports the per-chunk outcome log + retry warnings.
+   - Text format: human-readable .log file with header (job ID, org, branch,
+     model, status, started/finished timestamps, duration, summary) and
+     a per-chunk table (status, tags count, chunk-id, repo, author, error).
+   - JSON format: structured payload with `chunkEvents` and `retryLog`
+     arrays.
+   - UI: two small outline buttons (".log" and ".json") inside the Scan
+     quality card, visible once chunks have run.
+   - Backend: `ScanJob` type gained `chunkEvents`, `retryLog`,
+     `finishedAt` fields. `setChunkContext(chunkId)` + `drainRetryEvents(
+     chunkId)` helpers in `skill-extractor.ts` attribute GLM retry events
+     to the chunk that caused them via a global buffer (capped at 1000).
+   - Verified: existing scan id returns HTTP 200 with proper text format.
+
+## Styling Improvements
+
+4. **Force graph rendering polish** (`force-graph.tsx`):
+   - Node opacity raised from 0.85 → 0.96 for stronger contrast.
+   - Added subtle drop shadow on every node (`shadowBlur: 4,
+     shadowOffsetY: 1.5, shadowColor: oklch(0.20 0 0 / 0.18)`) for depth.
+   - Added colored outer glow on hover/selected (`shadowColor: n.color,
+     shadowBlur: 16`).
+   - Border changed from dark-thin to bright-thick (`oklch(1 0 0 / 0.85)`
+     for normal, `oklch(0.15 0 0 / 0.92)` 2.5px for highlighted) — gives
+     a "sticker" look that pops on the cream background.
+   - Labels: replaced flat rectangles with rounded-pill backgrounds
+     (radius=4, padX=7) using `quadraticCurveTo` for the corners. Font
+     weight bumped to 600 for legibility.
+   - Edges: highlighted edge opacity 0.10 → 0.14, highlighted 0.55 → 0.65;
+     highlighted edge width 1.6 → 2.
+
+5. **People table redesign** (`page.tsx`):
+   - Sticky table header (`sticky top-0 z-10 backdrop-blur-sm`).
+   - Avatar column (h-8 w-8) next to each person's name + @login.
+   - Commit count column now shows the number + a people-colored bar
+     visualizing % of max commits.
+   - Skill chips redesigned as colored pills per dimension (sector=red,
+     problem=green, tech=blue, methodology=purple, role=yellow) with
+     subtle bg tint (`bg-sector/5`) — replaces generic outline badges.
+   - "+N" overflow chip when a person has more skills than the visible
+     max (3 or 4).
+   - Empty state for cells with no skills ("—" italic muted).
+   - Header text upgraded to uppercase tracking-wide muted-foreground.
+   - Hover state on rows (`hover:bg-muted/30 transition-colors group`).
+   - Chip brightness bumps on row hover.
+
+6. **Analytics leaderboard polish** (`analytics-panel.tsx`):
+   - Added "% of total" column next to each bar (right-aligned tabular-nums).
+   - Bar height bumped 1.5 → 2px for better visibility.
+   - Bar now brightens on hover (`group-hover:brightness-110`).
+   - Row has subtle hover background (`hover:bg-muted/40 -mx-1`).
+   - CardDescription now shows total commit count across all listed tags.
+   - CardHeader gets `pb-3` for tighter spacing.
+
+7. **OrgSummaryStrip polish** (`analytics-panel.tsx`):
+   - Each stat card now has a colored top accent bar (0.5px) matching
+     its dimension (People=teal, Commits=gray, Chunks=primary, Skills=
+     sector, Diverse=amber, TopSector=sector).
+   - "People" card shows an avatar stack of up to 5 contributors + "+N"
+     overflow chip — gives instant visual context.
+   - Hover: card value translates up 0.5px (`group-hover:-translate-y-0.5`)
+     for a subtle lift effect.
+   - `title` attributes on value + subtext for full text on hover.
+
+8. **Scan panel enhancements** (`scan-progress-panel.tsx`):
+   - Duration badge in the header showing elapsed/total scan time.
+   - Download-log buttons (`.log` + `.json`) inside the Scan quality card.
+
+## Verification
+- Lint clean (`bun run lint` → no errors).
+- All 3 main tabs verified via agent-browser + VLM:
+  · Skill Graph: nodes have shadows + high contrast, labels use rounded
+    pill backgrounds, layout clean.
+  · People: avatars next to each person, commit-count bar visible,
+    skill chips colored per dimension, table well-aligned.
+  · Analytics: top stats strip with avatar stack, leaderboard bars with
+    right-aligned %, color-coded cards with top accent bars.
+- Compare People card verified: 33% overall similarity headline, per-
+  dimension Jaccard bars, Shared/Only-A/Only-B groupings.
+- Skill Coverage Matrix verified: heatmap grid with colored cells,
+  dimension tabs, people avatars on rows, skill names on columns, color
+  legend at bottom.
+- Scan log API verified: `GET /api/scan/log?id=...&format=text` returns
+  HTTP 200 with proper text format; old jobs handled gracefully.
+- Server healthy (HTTP 200 on `/`), no runtime errors after fixes.
+
+Stage Summary:
+- **3 new features**: Jaccard similarity in Compare People (overall + per-
+  dimension with semantic labels), interactive Skill Coverage Matrix
+  heatmap (5 dimension tabs, pinnable columns, color legend), scan log
+  export API + UI buttons (.log text format + .json structured format).
+- **4 styling improvements**: Force graph rendering (shadows, opacity,
+  rounded-pill labels), People table redesign (avatars, sticky header,
+  commit-count bars, colored chips), Analytics leaderboard polish (%
+  labels, brighter bars, hover states), OrgSummaryStrip visual upgrade
+  (top accent bars, avatar stack, hover lift).
+- **1 bug fix**: Scan Log API now handles old in-memory jobs that predate
+  the `chunkEvents` field (defensive defaults).
+- Lint clean. Server healthy. All features verified via agent-browser +
+  VLM on real Gaia-Recipe scan data.
+
+Unresolved / Next-phase recommendations:
+- The Skill Coverage Matrix could be extended to show all people (scroll)
+  and support row-clicking to navigate to that person's detail in the
+  Skill Graph tab.
+- The scan log could be persisted to the SQLite cache so it survives
+  server restarts (currently in-memory only).
+- Consider adding a "skill gap analysis" feature that highlights skills
+  the org is missing (e.g. no one has "Testing/QA" role).
+- The Compare People card could let users pick from a dropdown of all
+  people, not just the contributor list.
+- Consider adding CSV export of the People table for spreadsheet use.

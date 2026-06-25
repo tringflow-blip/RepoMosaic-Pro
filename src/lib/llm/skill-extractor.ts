@@ -274,9 +274,16 @@ async function callGLMWithRetry(
       if (isTransient(err) && attempt < maxRetries) {
         // Exponential backoff: ~1s, ~2s, ~4s, ~8s (with jitter)
         const delay = Math.min(30000, 1000 * 2 ** attempt + Math.random() * 500);
+        const msg = (err as Error).message.slice(0, 100);
         console.warn(
-          `[glm-retry] attempt ${attempt + 1}/${maxRetries + 1} failed: ${(err as Error).message.slice(0, 100)} → retrying in ${Math.round(delay)}ms`
+          `[glm-retry] attempt ${attempt + 1}/${maxRetries + 1} failed: ${msg} → retrying in ${Math.round(delay)}ms`
         );
+        // Push to the global retry registry so the scan log can pick it up
+        pushRetryEvent({
+          attempt: attempt + 1,
+          error: msg,
+          timestamp: Date.now(),
+        });
         await sleep(delay);
         continue;
       }
@@ -284,6 +291,50 @@ async function callGLMWithRetry(
     }
   }
   throw lastErr;
+}
+
+/** Global retry registry — the scan orchestrator pulls from this each chunk
+ *  to attach retry warnings to the active job's log. The key is the chunk
+ *  id (set by the orchestrator around each call); the value is the list of
+ *  retry events that occurred during that chunk. */
+const globalForRetry = globalThis as unknown as {
+  __retryBuffer?: { chunkId: string | null; attempt: number; error: string; timestamp: number }[];
+};
+if (!globalForRetry.__retryBuffer) globalForRetry.__retryBuffer = [];
+
+function pushRetryEvent(ev: { attempt: number; error: string; timestamp: number }) {
+  globalForRetry.__retryBuffer!.push({
+    chunkId: currentChunkId,
+    attempt: ev.attempt,
+    error: ev.error,
+    timestamp: ev.timestamp,
+  });
+  // Cap the buffer to avoid unbounded growth on a runaway scan
+  if (globalForRetry.__retryBuffer!.length > 1000) {
+    globalForRetry.__retryBuffer!.splice(0, globalForRetry.__retryBuffer!.length - 1000);
+  }
+}
+
+let currentChunkId: string | null = null;
+
+/** Set the current chunk id — used by the scan orchestrator to attribute
+ *  retry events to the chunk that caused them. Returns a reset function. */
+export function setChunkContext(chunkId: string): () => void {
+  currentChunkId = chunkId;
+  return () => {
+    currentChunkId = null;
+  };
+}
+
+/** Drain the retry buffer for a given chunk id — returns the events and
+ *  removes them from the global buffer. */
+export function drainRetryEvents(chunkId: string): { chunkId: string; attempt: number; error: string; timestamp: number }[] {
+  const buf = globalForRetry.__retryBuffer!;
+  const matching = buf.filter((e) => e.chunkId === chunkId);
+  if (matching.length > 0) {
+    globalForRetry.__retryBuffer = buf.filter((e) => e.chunkId !== chunkId);
+  }
+  return matching;
 }
 
 /** Analyse a single chunk of commits and return multi-dimensional skill tags.
