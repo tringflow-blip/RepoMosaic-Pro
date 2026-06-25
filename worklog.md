@@ -487,3 +487,187 @@ Unresolved / Next-phase recommendations:
 - The Compare People card could let users pick from a dropdown of all
   people, not just the contributor list.
 - Consider adding CSV export of the People table for spreadsheet use.
+
+---
+Task ID: 6
+Agent: main (cron webDevReview)
+Task: QA assessment + new features (Skill Gap Analysis, Person Similarity Matrix, CSV export, cross-tab row-click navigation) + styling polish (force-graph pulse animation, empty states, "/" keyboard shortcut).
+
+## QA Assessment
+- Loaded the app via agent-browser, re-authenticated with the GitHub token,
+  re-loaded Gaia-Recipe from SQLite cache (6 people, 3 repos, 268 commits,
+  49 LLM chunks).
+- Used VLM (z-ai vision CLI) to analyze screenshots of all 3 tabs + the
+  Skill Coverage Matrix and Compare People card.
+- Verified existing features (Skill Graph, People table, Analytics
+  leaderboards, Skill Coverage Matrix heatmap, Skill Co-occurrence,
+  Scan log API) all still work from cache.
+- No new bugs surfaced in this round.
+
+## Bug Fixes
+- **Cross-tab focus race condition**: initial implementation had
+  PeopleTable dispatch a `repomosaic:focus-person` window event BEFORE
+  switching tabs, but AdvancedSkillGraph wasn't mounted yet to listen.
+  - First attempt: deferred event with `setTimeout(16)` — still racy
+    because the listener attaches in a useEffect after mount.
+  - Final fix: lifted focusRequest state to page.tsx, passed it as a
+    prop to AdvancedSkillGraph, and used the React-recommended
+    "adjust state during render" pattern (`prevFocusRequest` tracking)
+    instead of setState-in-effect (which trips the
+    `react-hooks/set-state-in-effect` lint rule).
+  - Also fixed an off-by-one in the initial `prevFocusRequest` value:
+    was initialized to `focusRequest` (which would suppress the very
+    first focus when navigating directly from People → Skill Graph
+    via row click). Changed to always initialize to `""`.
+- **`react-hooks/set-state-in-effect` lint error**: refactored the
+  focus-request handler from a useEffect to the render-time
+  "previous value tracking" pattern. Lint is clean.
+
+## New Features
+
+1. **Skill Gap Analysis card** (`analytics-panel.tsx`):
+   - Compares the team's actual skills (per dimension) to the seed
+     taxonomy in `skill-taxonomy.ts` and shows which seeds NO person
+     has touched.
+   - Dimension tabs (Sector/Problem/Tech/Method/Role) switch the view.
+   - Each missing seed is a dashed-border amber card with a 1-line
+     description (e.g. "Testing & QA → Test coverage, regression safety").
+   - 18 seeds have human-friendly descriptions; the rest just show the
+     seed name.
+   - "No gaps detected" empty state with a green sparkle when coverage
+     is 100%.
+   - Coverage summary bar at the bottom showing `present/total · %`.
+   - Verified on Gaia-Recipe: Roles dimension shows 8 of 18 missing
+     (Architecture, Testing & QA, Code Review, Security Hardening, API
+     Design, Release Management, Mentoring, Research & Prototyping),
+     10/18 = 56% coverage.
+
+2. **Person Similarity Matrix** (`analytics-panel.tsx`):
+   - NxN grid (up to 10×10) of overall Jaccard similarity between every
+     pair of contributors across all 5 dimensions.
+   - Diagonal cells show "—" with an inset ring (self-comparison).
+   - Off-diagonal cells show the Jaccard % (0-100) with a green color
+     gradient (darker = more overlap).
+   - Hover state: ring-2 ring-primary/60 + scale-110 + tooltip showing
+     "A vs B: NN% (X/Y shared)".
+   - Vertical-rl column headers + small avatars on row labels to fit
+     long names.
+   - Color legend (Low → High) + "Hover for details · diagonal = self"
+     hint at the bottom.
+   - Verified on Gaia-Recipe: 6×6 grid renders, jolinajavier02 vs Yena
+     shows 33 (matches the Compare People card's overall similarity).
+
+3. **CSV export of People table** (`page.tsx`):
+   - "Export CSV" outline button at the top-right of the People table.
+   - Generates a CSV with columns: name, login, commits, chunks, repos,
+     sectors, problem_types, tech, methodologies, roles, avatar_url.
+   - Skill lists are joined with " | " and properly CSV-escaped
+     (double-quotes doubled).
+   - File named `${org}-people-skills.csv` (e.g.
+     `Gaia-Recipe-people-skills.csv`).
+   - Pure client-side (Blob + URL.createObjectURL), no API call needed.
+   - Verified: button click triggers a download with no console errors.
+
+4. **Cross-tab People → Skill Graph navigation** (`page.tsx` +
+   `advanced-skill-graph.tsx`):
+   - People table rows are now clickable (cursor: pointer + hover bg).
+   - Clicking a row sets `focusRequest` state on the parent page to
+     `"login:timestamp"` and switches to the Skill Graph tab.
+   - AdvancedSkillGraph watches the `focusRequest` prop; when it
+     changes, it sets `selectedLogin` to that person (and exits
+     Compare mode if active).
+   - The timestamp suffix lets the user click the SAME person twice
+     in a row and still trigger the focus effect (otherwise the prop
+     value wouldn't change).
+   - Verified: clicking the Yena row in People → navigates to Skill
+     Graph with Yena's detail card showing (Media/Content 85%,
+     Web3/Crypto 70%, UI/UX & Design Systems 85%, etc.).
+
+5. **"/" keyboard shortcut to focus search** (`advanced-skill-graph.tsx`):
+   - Pressing "/" anywhere outside an input/textarea focuses the
+     contributor search box in the Skill Graph tab.
+   - Placeholder updated to `"Search by name, skill, sector… (press /
+     to focus)"` to advertise the shortcut.
+   - Verified: after pressing "/", `document.activeElement.placeholder`
+     returns the search input's placeholder.
+
+## Styling Polish
+
+6. **Pulsing animation on selected force-graph node** (`force-graph.tsx`):
+   - Added a `pulseRef` (0..1 phase) and a separate rAF loop that runs
+     ONLY while a node is selected.
+   - The draw function now renders 2 concentric expanding rings around
+     the selected node: each ring grows from `r+4` to `r+22` while
+     fading from 0.45 alpha to 0, with the second ring offset by half
+     a phase (0.5) for a continuous ripple effect.
+   - Cycle time ~1.2s — slow, meditative pulse, not distracting.
+   - The rAF loop is in its own useEffect with `[selected]` deps so
+     it doesn't restart on every `draw` closure change.
+   - Verified via VLM: selected node "J" (jolinajavier02) appears
+     with thicker border and glow.
+
+7. **Empty state improvements** (`page.tsx`):
+   - `EmptyState` component now accepts an optional `action` prop
+     (`{ label, onClick }`).
+   - Icon container bumped from h-12 w-12 to h-14 w-14 with ring-1
+     ring-border/50 for better visual weight.
+   - All 3 empty states (Skill Graph / People / Analytics) now show a
+     "Go to Scan" action button that switches to the Scan tab.
+   - Description copy expanded to explain what the user will see after
+     scanning (e.g. "Run a scan to generate a multi-dimensional skill
+     graph from commit history.").
+
+8. **People table top action bar** (`page.tsx`):
+   - New `border-b bg-muted/30` strip above the table with the
+     contributor count + "click a row to inspect in Skill Graph" hint
+     on the left, and the "Export CSV" button on the right.
+
+## Verification
+- Lint clean (`bun run lint` → no errors).
+- All 3 main tabs + new features verified via agent-browser + VLM on
+  real Gaia-Recipe scan data:
+  · Skill Graph: pulsing animation on selected person node, "/" shortcut
+    focuses search input.
+  · People: top action bar with Export CSV button, clickable rows
+    navigate to Skill Graph with the clicked person selected.
+  · Analytics: Skill Coverage Matrix (people × skills heatmap), Person
+    Similarity Matrix (6×6 Jaccard grid), Skill Gap Analysis (8/18
+    roles missing, 56% coverage bar) — all rendering correctly.
+- Cross-tab navigation verified end-to-end:
+  · Click Yena row in People → Skill Graph tab opens → Yena's detail
+    card shows her skill breakdown (Media/Content 85%, Web3/Crypto 70%,
+    UI/UX & Design Systems 85%, API Design & Versioning 70%, etc.).
+- CSV export verified: button click triggers a download (no console
+  errors, no API call needed — pure client-side Blob).
+- Server healthy (HTTP 200 on `/`), no runtime errors after fixes.
+
+Stage Summary:
+- **5 new features**: Skill Gap Analysis card (with seed descriptions +
+  coverage bar), Person Similarity Matrix (NxN Jaccard grid with hover
+  tooltips), CSV export of People table (client-side Blob download),
+  cross-tab People → Skill Graph navigation (lifted focusRequest state,
+  render-time prop-change pattern), "/" keyboard shortcut to focus the
+  contributor search input.
+- **3 styling polish items**: pulsing concentric rings on selected
+  force-graph node (rAF animation, ~1.2s cycle), EmptyState component
+  now supports action buttons + applied to all 3 empty states, People
+  table top action bar with contributor count + Export CSV button.
+- **2 bug fixes**: cross-tab focus race condition (lifted state to
+  parent + render-time pattern), `set-state-in-effect` lint error
+  (refactored to "previous value tracking" pattern).
+- Lint clean. Server healthy. All features verified via agent-browser +
+  VLM on real Gaia-Recipe scan data.
+
+Unresolved / Next-phase recommendations:
+- The Person Similarity Matrix could let users click a cell to navigate
+  to the Compare People card with that pair pre-selected.
+- The Skill Gap Analysis could highlight which missing skills are
+  "critical" (e.g. Testing & QA, Security) vs "nice-to-have".
+- Consider adding a "team skill radar chart" that overlays every
+  person's skill profile on a single radar for at-a-glance comparison.
+- The CSV export could be extended to also export the Analytics tab
+  data (leaderboards + matrix).
+- Consider adding a "share scan" feature that generates a URL with the
+  scan ID so users can bookmark or share their analysis.
+- The force graph could support multi-select (e.g. shift-click to add
+  to a "focus set" that highlights edges between selected nodes).

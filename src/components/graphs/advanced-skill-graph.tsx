@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,6 +34,10 @@ import {
 
 type Props = {
   skillMap: AdvancedSkillMap;
+  /** When this changes, the graph focuses this person. Used for cross-tab
+   *  navigation (e.g. clicking a People-table row). Pass a string that
+   *  changes each time you want to focus — e.g. `${login}:${Date.now()}`. */
+  focusRequest?: string;
 };
 
 const DIMENSIONS: { key: SkillDimension; label: string; icon: typeof Compass; color: string }[] = [
@@ -44,12 +48,32 @@ const DIMENSIONS: { key: SkillDimension; label: string; icon: typeof Compass; co
   { key: "role", label: "Roles", icon: Shield, color: "text-role" },
 ];
 
-export function AdvancedSkillGraph({ skillMap }: Props) {
+export function AdvancedSkillGraph({ skillMap, focusRequest }: Props) {
   const [dimension, setDimension] = useState<SkillDimension>("sector");
   const [search, setSearch] = useState("");
   const [selectedLogin, setSelectedLogin] = useState<string | null>(null);
   const [compareMode, setCompareMode] = useState(false);
   const [compareLogins, setCompareLogins] = useState<string[]>([]);
+  // Track the previous focusRequest so we can "adjust state when a prop changes"
+  // — the React-recommended pattern instead of setState-in-effect.
+  // Initialize to "" (not focusRequest) so that if the parent passes a non-empty
+  // focusRequest on first mount (e.g. user clicked a People-table row to navigate
+  // here), the if-block below fires and selects that person.
+  const [prevFocusRequest, setPrevFocusRequest] = useState("");
+
+  // Cross-tab focus: when focusRequest changes, switch selected person.
+  // This runs during render (not in an effect) to avoid cascading renders.
+  if ((focusRequest ?? "") !== prevFocusRequest) {
+    setPrevFocusRequest(focusRequest ?? "");
+    if (focusRequest) {
+      const login = focusRequest.split(":")[0];
+      if (login && skillMap.people.some((p) => p.login === login)) {
+        if (compareMode) setCompareMode(false);
+        setCompareLogins([]);
+        setSelectedLogin(login);
+      }
+    }
+  }
 
   const graph = useMemo(() => skillMapToGraph(skillMap, dimension), [skillMap, dimension]);
 
@@ -89,6 +113,34 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
       setSelectedLogin(selectedLogin === login ? null : login);
     }
   };
+
+  // Also listen for "repomosaic:focus-person" window events (legacy path
+  // — still used if someone dispatches the event manually)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ login: string }>;
+      if (typeof ce.detail?.login === "string") {
+        if (compareMode) setCompareMode(false);
+        setCompareLogins([]);
+        setSelectedLogin(ce.detail.login);
+      }
+    };
+    window.addEventListener("repomosaic:focus-person", handler as EventListener);
+    return () => window.removeEventListener("repomosaic:focus-person", handler as EventListener);
+  }, [compareMode, selectedLogin]);
+
+  // "/" keyboard shortcut to focus the contributor search input
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/" && document.activeElement?.tagName !== "INPUT" && document.activeElement?.tagName !== "TEXTAREA") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="space-y-4">
@@ -225,7 +277,8 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
             <div className="relative mt-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search by name, skill, sector…"
+                ref={searchInputRef}
+                placeholder="Search by name, skill, sector…  (press / to focus)"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 text-sm h-9"

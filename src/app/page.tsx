@@ -49,6 +49,10 @@ export default function Home() {
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [skillMap, setSkillMap] = useState<AdvancedSkillMap | null>(null);
   const [activeTab, setActiveTab] = useState("setup");
+  // Cross-tab focus request: format "login:timestamp". Changing this value
+  // causes the AdvancedSkillGraph to select that person. Used by the People
+  // table row-click handler.
+  const [focusRequest, setFocusRequest] = useState<string>("");
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -361,17 +365,35 @@ export default function Home() {
 
           <TabsContent value="graph">
             {skillMap ? (
-              <AdvancedSkillGraph skillMap={skillMap} />
+              <AdvancedSkillGraph skillMap={skillMap} focusRequest={focusRequest} />
             ) : (
-              <EmptyState icon={<Network className="h-6 w-6" />} title="No skill graph yet" desc="Run a scan first." />
+              <EmptyState
+                icon={<Network className="h-6 w-6" />}
+                title="No skill graph yet"
+                desc="Run a scan to generate a multi-dimensional skill graph from commit history."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
             )}
           </TabsContent>
 
           <TabsContent value="people">
             {skillMap ? (
-              <PeopleTable skillMap={skillMap} />
+              <PeopleTable
+                skillMap={skillMap}
+                onSwitchToGraph={(login) => {
+                  // Bump the focusRequest with a fresh timestamp so the effect re-runs
+                  // even if the user clicks the same person twice.
+                  setFocusRequest(`${login}:${Date.now()}`);
+                  setActiveTab("graph");
+                }}
+              />
             ) : (
-              <EmptyState icon={<Users className="h-6 w-6" />} title="No people yet" desc="Run a scan first." />
+              <EmptyState
+                icon={<Users className="h-6 w-6" />}
+                title="No people yet"
+                desc="Run a scan to see contributor skill profiles."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
             )}
           </TabsContent>
 
@@ -379,7 +401,12 @@ export default function Home() {
             {skillMap ? (
               <AnalyticsPanel skillMap={skillMap} />
             ) : (
-              <EmptyState icon={<BarChart3 className="h-6 w-6" />} title="No analytics yet" desc="Run a scan first." />
+              <EmptyState
+                icon={<BarChart3 className="h-6 w-6" />}
+                title="No analytics yet"
+                desc="Run a scan to see org-wide skill leaderboards and coverage."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
             )}
           </TabsContent>
         </Tabs>
@@ -419,22 +446,91 @@ function FeatureChip({ icon, title, desc }: { icon: React.ReactNode; title: stri
   );
 }
 
-function EmptyState({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+function EmptyState({
+  icon,
+  title,
+  desc,
+  action,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  desc: string;
+  action?: { label: string; onClick: () => void };
+}) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-muted-foreground mb-3">
+    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
+      <div className="h-14 w-14 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground mb-3 ring-1 ring-border/50">
         {icon}
       </div>
       <div className="text-sm font-medium">{title}</div>
-      <div className="text-xs text-muted-foreground mt-0.5">{desc}</div>
+      <div className="text-xs text-muted-foreground mt-0.5 mb-4">{desc}</div>
+      {action && (
+        <Button size="sm" onClick={action.onClick}>
+          {action.label}
+        </Button>
+      )}
     </div>
   );
 }
 
-function PeopleTable({ skillMap }: { skillMap: AdvancedSkillMap }) {
+function PeopleTable({
+  skillMap,
+  onSwitchToGraph,
+}: {
+  skillMap: AdvancedSkillMap;
+  onSwitchToGraph: (login: string) => void;
+}) {
   const maxCommits = Math.max(1, ...skillMap.people.map((p) => p.totalCommits));
+
+  const exportCsv = () => {
+    const escape = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
+    const joinSkills = (list: { name: string }[]) => list.map((s) => s.name).join(" | ");
+    const header = [
+      "name", "login", "commits", "chunks", "repos",
+      "sectors", "problem_types", "tech", "methodologies", "roles",
+      "avatar_url",
+    ].join(",");
+    const rows = skillMap.people.map((p) => [
+      escape(p.name || p.login),
+      escape(p.login),
+      p.totalCommits,
+      p.totalChunks,
+      p.repos.length,
+      escape(joinSkills(p.sectors)),
+      escape(joinSkills(p.problemTypes)),
+      escape(joinSkills(p.tech)),
+      escape(joinSkills(p.methodologies)),
+      escape(joinSkills(p.roles)),
+      escape(p.avatarUrl),
+    ].join(","));
+    const csv = [header, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${skillMap.org}-people-skills.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // No need for window events — the parent's onSwitchToGraph(login) callback
+  // updates the focusRequest prop on AdvancedSkillGraph directly.
+  const focusPerson = (login: string) => {
+    onSwitchToGraph(login);
+  };
+
   return (
     <div className="rounded-lg border overflow-hidden bg-card">
+      <div className="flex items-center justify-between gap-3 p-3 border-b bg-muted/30">
+        <div className="text-[11px] text-muted-foreground">
+          <span className="font-medium text-foreground">{skillMap.people.length}</span> contributors · click a row to inspect in Skill Graph
+        </div>
+        <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5">
+          <Download className="h-3 w-3" /> Export CSV
+        </Button>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
@@ -462,7 +558,12 @@ function PeopleTable({ skillMap }: { skillMap: AdvancedSkillMap }) {
             {skillMap.people.map((p) => {
               const pct = (p.totalCommits / maxCommits) * 100;
               return (
-                <tr key={p.login} className="border-t hover:bg-muted/30 transition-colors group">
+                <tr
+                  key={p.login}
+                  className="border-t hover:bg-muted/40 transition-colors group cursor-pointer"
+                  onClick={() => focusPerson(p.login)}
+                  title={`Click to inspect ${p.name || p.login} in Skill Graph`}
+                >
                   <td className="p-2.5">
                     <div className="flex items-center gap-2.5 min-w-0">
                       <Avatar className="h-8 w-8 shrink-0">

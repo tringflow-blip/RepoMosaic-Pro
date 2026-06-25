@@ -49,6 +49,7 @@ export function ForceGraph({
   const hoverRef = useRef<string | null>(null);
   const selectedRef = useRef<string | null>(null);
   const drawRef = useRef<() => void>(() => {});
+  const pulseRef = useRef<number>(0); // 0..1 phase for pulsing selected node
   const [hovered, setHovered] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [size, setSize] = useState({ w: 800, h: height });
@@ -142,6 +143,26 @@ export function ForceGraph({
       if (!n.x || !n.y) continue;
       const isHi = hoverRef.current === n.id || selectedRef.current === n.id;
       const r = n.r + (isHi ? 2 : 0);
+
+      // Pulsing concentric rings on the SELECTED node (not on hover)
+      if (selectedRef.current === n.id) {
+        const phase = pulseRef.current; // 0..1
+        // Draw 2 expanding rings offset by half a phase
+        for (let k = 0; k < 2; k++) {
+          const p = (phase + k * 0.5) % 1; // 0..1
+          const ringR = r + 4 + p * 18; // expand outward
+          const alpha = (1 - p) * 0.45;  // fade as it expands
+          if (alpha <= 0) continue;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, ringR, 0, Math.PI * 2);
+          ctx.strokeStyle = n.color;
+          ctx.globalAlpha = alpha;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+      }
 
       // Soft outer glow on hover/selected
       if (isHi) {
@@ -244,6 +265,28 @@ export function ForceGraph({
     selectedRef.current = selected;
     draw();
   }, [selected, draw]);
+
+  // Separate rAF loop that runs ONLY while something is selected.
+  // Calls drawRef.current() each frame so it always uses the latest draw closure
+  // without restarting the loop on every draw change.
+  useEffect(() => {
+    if (!selected) {
+      pulseRef.current = 0;
+      return;
+    }
+    let last = performance.now();
+    let raf = 0;
+    const loop = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      // ~1.2s per cycle — slow, meditative pulse
+      pulseRef.current = (pulseRef.current + dt / 1.2) % 1;
+      drawRef.current();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, [selected]);
 
   // Mouse interactions
   useEffect(() => {
