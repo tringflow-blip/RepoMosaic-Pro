@@ -206,3 +206,91 @@ All core functionality works:
 - Next.js 16 project scaffold
 - Basic UI framework
 - Theme support (light/dark)
+
+---
+
+## Phase 7: Publish to GitHub (2025-06-25)
+
+### Task
+User requested pushing the upgraded RepoMosaic-Pro project to GitHub, providing a
+personal access token (`ghp_...RFq`, belongs to user `tringflow-blip`).
+
+### Decision
+The original `tringflow-blip/RepoMosaic-Pro` repo on GitHub contains the *original*
+project (CLI + dashboard: .gitignore, AGENTS.md, LICENSE, README.md, cli/, dashboard/).
+The local project is a complete Next.js 16 rewrite with a totally different structure
+and history, so a force-push would destroy the original.
+
+**Decision: create a NEW repo `RepoMosaic-Pro-Advanced`** to publish the upgraded
+version while preserving the original.
+
+### Completed Modifications
+
+#### 1. Security cleanup (CRITICAL)
+The local repo had several files tracked that must NEVER be pushed:
+- `.env` — contained `DATABASE_URL` (low risk, but policy violation)
+- `db/custom.db` — 92 KB SQLite cache with user scan data
+- `.zscripts/dev.pid` — runtime PID file
+- `download/` — 87 QA screenshot files (clutter)
+- `qa-*.png` in root — 9 more QA screenshots
+- `tool-results/` — 20 bash/read tool output dumps
+
+All untracked via `git rm --cached` (files kept locally, removed from index).
+
+**Root cause of an earlier failed cleanup:** the first `git rm --cached .env db/custom.db .zscripts/dev.pid dev-watchdog.sh dev-watchdog.log` command failed atomically because `dev-watchdog.log` did not exist in the index — so NONE of the files were removed. Re-ran with only valid pathspecs and it succeeded.
+
+#### 2. .gitignore hardening
+Added new ignore rules:
+- `/db/*.db`, `/db/*.db-journal` — SQLite databases
+- `/.zscripts/dev.pid` — runtime PID
+- `dev-watchdog.log` — watchdog log
+- `/download/`, `/qa-*.png`, `qa-*.png` — QA artifacts
+- `/agent-ctx/` — agent context directory
+- `/tool-results/` — tool output dumps
+
+#### 3. README.md (NEW, comprehensive)
+Wrote a full project README covering:
+- Project purpose & motivation (vs. the original regex-based version)
+- The 5 skill dimensions table (Sector / Problem Type / Tech / Methodology / Role)
+- Feature list (8 tabs, person detail panel, export formats, UX polish)
+- Tech stack table
+- Getting started (install, run, env)
+- Scan pipeline ASCII diagram + step-by-step explanation
+- Project structure tree
+- Configuration (commit cap, custom LLM)
+- Validation results (Gaia-Recipe: 268 commits, 49 chunks, 6 people)
+- License
+
+#### 4. Git configuration
+- Set local `user.name = tringflow-blip`
+- Set local `user.email = 296768163+tringflow-blip@users.noreply.github.com` (GitHub noreply)
+- Added remote `origin` with token-embedded URL:
+  `https://x-access-token:ghp_...@github.com/tringflow-blip/RepoMosaic-Pro-Advanced.git`
+
+#### 5. GitHub repo creation
+Created via `POST /user/repos`:
+- Name: `RepoMosaic-Pro-Advanced`
+- Public
+- Description: "LLM-powered, multi-dimensional skill graph for any GitHub org or user..."
+- `auto_init: false` (clean push, no README conflict)
+
+#### 6. Commit & push
+- Single commit `8f6c8f7` "Publish RepoMosaic Pro - Advanced Skill Map" with full
+  feature description + cleanup notes in the body.
+- `git push -u origin main` succeeded — new branch, all 131 tracked files pushed.
+
+### Verification Results
+- ✅ Repo exists: https://github.com/tringflow-blip/RepoMosaic-Pro-Advanced
+- ✅ `main` branch is default
+- ✅ All source files present (src/, prisma/, examples/, mini-services/, .zscripts/, screenshots, README.md, package.json, etc.)
+- ✅ **Security: `.env` returns 404 on GitHub** (not pushed)
+- ✅ **Security: `db/custom.db` returns 404 on GitHub** (not pushed)
+- ✅ No `download/`, `qa-*.png`, or `tool-results/` clutter pushed
+- ✅ Original `tringflow-blip/RepoMosaic-Pro` repo untouched (preserved)
+
+### Stage Summary
+The upgraded RepoMosaic-Pro is now publicly available at:
+**https://github.com/tringflow-blip/RepoMosaic-Pro-Advanced**
+
+The original repo is preserved. The new repo contains only source code, config,
+screenshots, and documentation — no secrets, no runtime data, no dev clutter.
