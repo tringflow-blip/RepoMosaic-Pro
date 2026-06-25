@@ -22,6 +22,13 @@ import {
   ArrowRight,
   Heart,
   ArrowLeftRight,
+  Lightbulb,
+  TrendingUp,
+  Target,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Keyboard,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SetupPanel, type SetupState, type OwnerInfo } from "@/components/repomosaic/setup-panel";
@@ -259,30 +266,61 @@ export default function Home() {
     [skillMap]
   );
 
-  // Generate heatmap data from skillMap
+  // Use REAL commit activity data from the skillMap (aggregated by the scan
+  // pipeline from actual commit dates). Falls back to empty for old cached
+  // scans that don't have date info.
   const heatmapData = useMemo(() => {
-    if (!skillMap) return [];
-    // Create fake heatmap data from commit distribution
-    // In a real app, we'd have date info from commits
-    // For now, distribute commits across the last year with realistic patterns
-    const data: { date: string; count: number }[] = [];
-    const today = new Date();
-    const totalDays = 365;
-
-    for (let i = totalDays; i >= 0; i--) {
-      const d = new Date(today);
-      d.setDate(d.getDate() - i);
-      const dateStr = d.toISOString().split("T")[0];
-      // Create a realistic distribution: weekdays more active, some random variation
-      const dayOfWeek = d.getDay();
-      const isWeekday = dayOfWeek > 0 && dayOfWeek < 6;
-      const baseChance = isWeekday ? 0.6 : 0.25;
-      const isActive = Math.random() < baseChance;
-      const count = isActive ? Math.floor(Math.random() * 8) + 1 : 0;
-      data.push({ date: dateStr, count });
-    }
-    return data;
+    if (!skillMap || !skillMap.activity) return [];
+    return skillMap.activity;
   }, [skillMap]);
+
+  // ---- Keyboard shortcuts ----
+  // 1-9 switches tabs (when not typing in an input), Esc closes the person
+  // panel, "/" focuses the People-tab search box.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Don't trigger when typing in inputs/textareas
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+        if (e.key === "Escape" && target.blur) target.blur();
+        return;
+      }
+      if (e.key === "Escape") {
+        if (selectedPerson) setSelectedPerson(null);
+        return;
+      }
+      // "/" focuses the People-tab search box
+      if (e.key === "/") {
+        const input = document.getElementById("people-search-input") as HTMLInputElement | null;
+        if (input) {
+          setActiveTab("people");
+          // Defer focus until after the tab switch renders
+          setTimeout(() => input.focus(), 50);
+          e.preventDefault();
+          return;
+        }
+      }
+      // Tab switching with 1-9
+      if (!skillMap && (e.key === "1" || e.key === "2")) {
+        if (e.key === "1") setActiveTab("setup");
+        if (e.key === "2" && ownerInfo) setActiveTab("repos");
+        return;
+      }
+      if (skillMap) {
+        const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights"];
+        const idx = parseInt(e.key, 10) - 1;
+        if (idx >= 0 && idx < tabs.length) {
+          const targetTab = tabs[idx];
+          if ((targetTab === "repos" || targetTab === "scan") && !ownerInfo) return;
+          if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights") && !skillMap) return;
+          setActiveTab(targetTab);
+          e.preventDefault();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [skillMap, ownerInfo, selectedPerson]);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -358,6 +396,9 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="compare" className="text-xs" disabled={!skillMap}>
               <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Compare
+            </TabsTrigger>
+            <TabsTrigger value="insights" className="text-xs" disabled={!skillMap}>
+              <Lightbulb className="h-3.5 w-3.5 mr-1.5" /> Insights
             </TabsTrigger>
           </TabsList>
 
@@ -529,14 +570,25 @@ export default function Home() {
                   <div className="flex items-center gap-2 mb-4">
                     <Activity className="h-4 w-4 text-problem" />
                     <h3 className="text-sm font-semibold">Commit Activity</h3>
-                    <Badge variant="outline" className="text-[10px] font-mono ml-auto">
+                    {skillMap.firstCommitDate && skillMap.lastCommitDate && (
+                      <Badge variant="outline" className="text-[10px] font-mono ml-auto">
+                        {skillMap.firstCommitDate} → {skillMap.lastCommitDate}
+                      </Badge>
+                    )}
+                    <Badge variant="outline" className="text-[10px] font-mono">
                       {skillMap.totalCommits} total commits
                     </Badge>
                   </div>
-                  <CommitHeatmap
-                    data={heatmapData}
-                    totalCommits={skillMap.totalCommits}
-                  />
+                  {heatmapData.length > 0 ? (
+                    <CommitHeatmap
+                      data={heatmapData}
+                      totalCommits={skillMap.totalCommits}
+                    />
+                  ) : (
+                    <div className="text-xs text-muted-foreground italic py-8 text-center">
+                      No commit date data in this scan. Re-run the scan to populate the heatmap with real activity.
+                    </div>
+                  )}
                 </div>
 
                 {/* People Activity Ranking */}
@@ -552,7 +604,7 @@ export default function Home() {
                         const maxCommits = skillMap.people[0]?.totalCommits ?? 1;
                         const pct = (p.totalCommits / maxCommits) * 100;
                         return (
-                          <div key={p.login} className="flex items-center gap-3 group cursor-pointer" onClick={() => setSelectedPerson(p)}>
+                          <div key={p.login} className="flex items-center gap-3 group cursor-pointer hover:bg-muted/40 -mx-2 px-2 py-1.5 rounded-lg transition-colors" onClick={() => setSelectedPerson(p)}>
                             <span className="text-xs font-mono text-muted-foreground w-4 text-right">{i + 1}</span>
                             <Avatar className="h-7 w-7 shrink-0 ring-1 ring-border/50">
                               <AvatarImage src={p.avatarUrl} />
@@ -595,17 +647,18 @@ export default function Home() {
                         <div key={dim.label}>
                           <div className="flex items-center justify-between mb-1.5">
                             <span className={`text-xs font-medium ${dim.textClass}`}>{dim.label}</span>
-                            <span className="text-[10px] text-muted-foreground">{dim.items.length} unique</span>
+                            <span className="text-[10px] text-muted-foreground tabular-nums">{dim.items.length} unique</span>
                           </div>
                           <div className="h-2 rounded-full bg-muted overflow-hidden flex">
                             {dim.items.slice(0, 8).map((item, i) => {
                               const width = totalScore > 0 ? (item.score / totalScore) * 100 : 0;
+                              const opacityCls = ["opacity-100", "opacity-90", "opacity-80", "opacity-70", "opacity-60", "opacity-50", "opacity-40", "opacity-30"][i] ?? "opacity-30";
                               return (
                                 <div
                                   key={item.name}
-                                  className={`${dim.color} first:rounded-l-full last:rounded-r-full opacity-${90 - i * 8}`}
+                                  className={cn(dim.color, "first:rounded-l-full last:rounded-r-full transition-all hover:brightness-110", opacityCls)}
                                   style={{ width: `${Math.max(width, 1)}%` }}
-                                  title={`${item.name}: ${item.score.toFixed(1)}`}
+                                  title={`${item.name}: ${item.score.toFixed(1)} score · ${item.commits} commits · ${item.people} people`}
                                 />
                               );
                             })}
@@ -625,6 +678,19 @@ export default function Home() {
               />
             )}
           </TabsContent>
+
+          <TabsContent value="insights">
+            {skillMap ? (
+              <InsightsPanel skillMap={skillMap} onSelectPerson={(p) => setSelectedPerson(p)} />
+            ) : (
+              <EmptyState
+                icon={<Lightbulb className="h-6 w-6" />}
+                title="No insights yet"
+                desc="Run a scan to see AI-style recommendations based on skill gaps and team coverage."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
+            )}
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -640,6 +706,13 @@ export default function Home() {
             </div>
             <span className="text-border">·</span>
             <span className="font-mono">GLM {setup.llmConfig.provider === "glm" ? "(default)" : `+ ${setup.llmConfig.provider}`}</span>
+            <span className="hidden md:inline text-border">·</span>
+            <span className="hidden md:inline-flex items-center gap-1" title="Keyboard shortcuts: 1-9 switch tabs, / focus search, Esc close panel">
+              <Keyboard className="h-3 w-3" />
+              <kbd className="font-mono text-[9px] px-1 py-0.5 rounded border bg-muted">1-9</kbd>
+              <kbd className="font-mono text-[9px] px-1 py-0.5 rounded border bg-muted">/</kbd>
+              <kbd className="font-mono text-[9px] px-1 py-0.5 rounded border bg-muted">Esc</kbd>
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {scanStatus?.status === "running" && (
@@ -728,6 +801,46 @@ function PeopleTable({
   onInspectPerson: (person: PersonSkillRecord) => void;
 }) {
   const maxCommits = Math.max(1, ...skillMap.people.map((p) => p.totalCommits));
+  const [sortKey, setSortKey] = useState<"commits" | "chunks" | "repos" | "name">("commits");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [query, setQuery] = useState("");
+
+  const filteredPeople = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const list = q
+      ? skillMap.people.filter((p) =>
+          p.login.toLowerCase().includes(q) ||
+          (p.name ?? "").toLowerCase().includes(q) ||
+          p.repos.some((r) => r.toLowerCase().includes(q)) ||
+          p.sectors.some((s) => s.name.toLowerCase().includes(q)) ||
+          p.tech.some((s) => s.name.toLowerCase().includes(q)) ||
+          p.roles.some((s) => s.name.toLowerCase().includes(q))
+        )
+      : skillMap.people;
+    const sorted = [...list].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "name") cmp = (a.name || a.login).localeCompare(b.name || b.login);
+      else if (sortKey === "commits") cmp = a.totalCommits - b.totalCommits;
+      else if (sortKey === "chunks") cmp = a.totalChunks - b.totalChunks;
+      else if (sortKey === "repos") cmp = a.repos.length - b.repos.length;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [skillMap.people, sortKey, sortDir, query]);
+
+  const toggleSort = (key: "commits" | "chunks" | "repos" | "name") => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "name" ? "asc" : "desc");
+    }
+  };
+
+  const SortIcon = ({ active }: { active: boolean }) =>
+    active ? (
+      sortDir === "asc" ? <ChevronUp className="h-3 w-3 inline ml-0.5" /> : <ChevronDown className="h-3 w-3 inline ml-0.5" />
+    ) : null;
 
   const exportCsv = () => {
     const escape = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
@@ -768,29 +881,55 @@ function PeopleTable({
 
   return (
     <div className="rounded-xl border overflow-hidden bg-card shadow-soft animate-fade-in-up">
-      <div className="flex items-center justify-between gap-3 p-3 border-b bg-muted/30">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 border-b bg-muted/30">
         <div className="text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">{skillMap.people.length}</span> contributors · click a row to inspect
+          <span className="font-medium text-foreground">{filteredPeople.length}</span>
+          {query && <span> of {skillMap.people.length}</span>} contributors · click a row to inspect
         </div>
-        <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5 active-scale">
-          <Download className="h-3 w-3" /> Export CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="h-3 w-3 absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="text"
+              placeholder="Search name, skill, repo…  (press / to focus)"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="h-7 w-[180px] sm:w-[260px] rounded-md border bg-background pl-7 pr-2 text-[11px] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40 transition-all"
+              id="people-search-input"
+            />
+          </div>
+          <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5 active-scale">
+            <Download className="h-3 w-3" /> CSV
+          </Button>
+        </div>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead className="bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
             <tr className="text-left">
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[220px]">
-                Person
+              <th
+                className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[220px] cursor-pointer hover:text-foreground transition-colors select-none"
+                onClick={() => toggleSort("name")}
+              >
+                Person <SortIcon active={sortKey === "name"} />
               </th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[110px]">
-                Commits
+              <th
+                className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[110px] cursor-pointer hover:text-foreground transition-colors select-none"
+                onClick={() => toggleSort("commits")}
+              >
+                Commits <SortIcon active={sortKey === "commits"} />
               </th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px]">
-                Chunks
+              <th
+                className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px] cursor-pointer hover:text-foreground transition-colors select-none"
+                onClick={() => toggleSort("chunks")}
+              >
+                Chunks <SortIcon active={sortKey === "chunks"} />
               </th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px]">
-                Repos
+              <th
+                className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px] cursor-pointer hover:text-foreground transition-colors select-none"
+                onClick={() => toggleSort("repos")}
+              >
+                Repos <SortIcon active={sortKey === "repos"} />
               </th>
               <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-sector min-w-[160px]">Sectors</th>
               <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-problem min-w-[180px]">Problem Types</th>
@@ -800,7 +939,7 @@ function PeopleTable({
             </tr>
           </thead>
           <tbody>
-            {skillMap.people.map((p, idx) => {
+            {filteredPeople.map((p, idx) => {
               const pct = (p.totalCommits / maxCommits) * 100;
               return (
                 <tr
@@ -855,10 +994,10 @@ function PeopleTable({
                 </tr>
               );
             })}
-            {skillMap.people.length === 0 && (
+            {filteredPeople.length === 0 && (
               <tr>
                 <td colSpan={9} className="p-6 text-center text-muted-foreground">
-                  No people detected.
+                  {query ? `No contributors match "${query}"` : "No people detected."}
                 </td>
               </tr>
             )}
@@ -914,6 +1053,324 @@ function SkillChipList({
           +{overflow}
         </span>
       )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  InsightsPanel — AI-style recommendations derived from the skill map */
+/* ------------------------------------------------------------------ */
+
+type Insight = {
+  id: string;
+  type: "gap" | "concentration" | "opportunity" | "balance" | "coverage";
+  title: string;
+  description: string;
+  severity: "info" | "warning" | "success";
+  actionLabel?: string;
+  onAction?: () => void;
+  related?: string[];
+};
+
+function InsightsPanel({
+  skillMap,
+  onSelectPerson,
+}: {
+  skillMap: AdvancedSkillMap;
+  onSelectPerson: (p: PersonSkillRecord) => void;
+}) {
+  const insights = useMemo<Insight[]>(() => {
+    const out: Insight[] = [];
+
+    // 1. Bus-factor detection: any repo where one person has > 80% share
+    const busFactors: { repo: string; person: PersonSkillRecord; share: number }[] = [];
+    for (const p of skillMap.people) {
+      for (const o of p.ownership) {
+        if (o.share >= 0.8 && o.commits >= 5) {
+          busFactors.push({ repo: o.repo, person: p, share: o.share });
+        }
+      }
+    }
+    if (busFactors.length > 0) {
+      out.push({
+        id: "bus-factor",
+        type: "concentration",
+        title: `Bus-factor risk on ${busFactors.length} repo${busFactors.length === 1 ? "" : "s"}`,
+        description: `${busFactors.slice(0, 3).map((b) => `${b.person.login} owns ${Math.round(b.share * 100)}% of ${b.repo}`).join("; ")}${busFactors.length > 3 ? ` … +${busFactors.length - 3} more` : ""}. Consider knowledge sharing or pair programming to reduce concentration risk.`,
+        severity: "warning",
+        actionLabel: "View person",
+        onAction: () => busFactors[0] && onSelectPerson(busFactors[0].person),
+        related: busFactors.map((b) => b.repo),
+      });
+    }
+
+    // 2. Skill gap: seed skills mentioned in the taxonomy that no one has
+    const allTech = new Set(skillMap.orgTech.map((t) => t.name.toLowerCase()));
+    const commonMissing = ["Testing & QA", "CI/CD & Release Engineering", "Observability & Monitoring"]
+      .filter((s) => !skillMap.orgProblemTypes.some((p) => p.name === s));
+    if (commonMissing.length > 0 && skillMap.totalCommits > 30) {
+      out.push({
+        id: "skill-gap",
+        type: "gap",
+        title: `Potential practice gaps: ${commonMissing.join(", ")}`,
+        description: `None of the scanned commits were tagged with these common engineering practices. This may indicate either a real gap or that they happen outside the scanned repos (e.g. in CI config files, .github/ workflows, or test files that the LLM didn't see).`,
+        severity: "info",
+      });
+    }
+
+    // 3. Tech diversity: ratio of unique tech to people
+    const techPerPerson = skillMap.totalPeople > 0 ? skillMap.orgTech.length / skillMap.totalPeople : 0;
+    if (techPerPerson >= 5) {
+      out.push({
+        id: "tech-diversity",
+        type: "opportunity",
+        title: `High tech diversity (${skillMap.orgTech.length} techs / ${skillMap.totalPeople} people = ${techPerPerson.toFixed(1)} per person)`,
+        description: `The team works across a broad tech surface area. This is great for versatility but may indicate context-switching overhead. Consider grouping people with complementary stacks for cross-training.`,
+        severity: "success",
+      });
+    } else if (techPerPerson < 2 && skillMap.orgTech.length > 0) {
+      out.push({
+        id: "tech-narrow",
+        type: "concentration",
+        title: `Narrow tech focus (${skillMap.orgTech.length} techs / ${skillMap.totalPeople} people)`,
+        description: `The team concentrates on a small tech surface. This enables deep expertise but may limit adaptability to new requirements. Consider hack-days or rotation to broaden the stack.`,
+        severity: "info",
+      });
+    }
+
+    // 4. Sector coverage: only 1 sector → high concentration
+    if (skillMap.orgSectors.length === 1) {
+      out.push({
+        id: "single-sector",
+        type: "concentration",
+        title: `Single-sector focus: ${skillMap.orgSectors[0].name}`,
+        description: `All scanned commits fall under one sector. This is fine for specialised teams, but if the org is meant to be multi-domain, the scan may be missing repos from other sectors.`,
+        severity: "info",
+      });
+    } else if (skillMap.orgSectors.length >= 4) {
+      out.push({
+        id: "multi-sector",
+        type: "coverage",
+        title: `Multi-sector coverage: ${skillMap.orgSectors.length} sectors`,
+        description: `The team operates across ${skillMap.orgSectors.slice(0, 5).map((s) => s.name).join(", ")}. This breadth is a strength — cross-sector insights often drive innovation.`,
+        severity: "success",
+      });
+    }
+
+    // 5. Role balance: implementation vs architecture ratio
+    const implCount = skillMap.orgRoles.find((r) => r.name === "Implementation")?.commits ?? 0;
+    const archCount = skillMap.orgRoles.find((r) => r.name === "Architecture")?.commits ?? 0;
+    const docCount = skillMap.orgRoles.find((r) => r.name === "Documentation")?.commits ?? 0;
+    const totalRoleCommits = skillMap.orgRoles.reduce((s, r) => s + r.commits, 0) || 1;
+    const docPct = (docCount / totalRoleCommits) * 100;
+    if (docPct < 5 && skillMap.totalCommits > 50) {
+      out.push({
+        id: "low-docs",
+        type: "balance",
+        title: `Documentation commits are ${docPct.toFixed(1)}% of activity`,
+        description: `Documentation is a small fraction of total commits. Consider a "docs-first" sprint or ADR (Architecture Decision Records) practice to capture institutional knowledge.`,
+        severity: "info",
+      });
+    }
+    if (archCount > 0 && implCount > 0 && archCount / implCount > 0.5) {
+      out.push({
+        id: "arch-heavy",
+        type: "balance",
+        title: `Architecture-heavy activity (${Math.round((archCount / (archCount + implCount)) * 100)}% arch vs impl)`,
+        description: `A high ratio of architecture to implementation commits may indicate planning-heavy phase or that the team is designing without enough delivery follow-through. Watch for analysis-paralysis.`,
+        severity: "info",
+      });
+    }
+
+    // 6. Most diverse contributor — recognition insight
+    const mostDiverse = [...skillMap.people]
+      .map((p) => ({
+        p,
+        unique: p.sectors.length + p.problemTypes.length + p.tech.length + p.methodologies.length + p.roles.length,
+      }))
+      .sort((a, b) => b.unique - a.unique)[0];
+    if (mostDiverse && mostDiverse.unique >= 10) {
+      out.push({
+        id: "diverse-contributor",
+        type: "opportunity",
+        title: `${mostDiverse.p.name || mostDiverse.p.login} is the team's polymath (${mostDiverse.unique} unique skills)`,
+        description: `${mostDiverse.p.login} spans ${mostDiverse.p.sectors.length} sectors, ${mostDiverse.p.tech.length} techs, and ${mostDiverse.p.roles.length} roles. They're a strong candidate for mentoring, architecture review, or cross-team liaison.`,
+        severity: "success",
+        actionLabel: "View profile",
+        onAction: () => onSelectPerson(mostDiverse.p),
+      });
+    }
+
+    // 7. Top contributor dominance
+    if (skillMap.people.length >= 3) {
+      const sorted = [...skillMap.people].sort((a, b) => b.totalCommits - a.totalCommits);
+      const topShare = sorted[0].totalCommits / skillMap.totalCommits;
+      if (topShare >= 0.6) {
+        out.push({
+          id: "top-dominance",
+          type: "concentration",
+          title: `${sorted[0].login} contributes ${Math.round(topShare * 100)}% of all commits`,
+          description: `One person drives the majority of activity. This is a high-risk pattern — they hold a lot of implicit knowledge. Consider rotating ownership, pair programming, or documentation sprints.`,
+          severity: "warning",
+          actionLabel: "View profile",
+          onAction: () => onSelectPerson(sorted[0]),
+        });
+      }
+    }
+
+    // 8. Activity recency: last commit date
+    if (skillMap.lastCommitDate) {
+      const last = new Date(skillMap.lastCommitDate);
+      const days = Math.floor((Date.now() - last.getTime()) / (1000 * 60 * 60 * 24));
+      if (days > 90) {
+        out.push({
+          id: "stale-repos",
+          type: "gap",
+          title: `Last commit was ${days} days ago`,
+          description: `The scanned repos haven't seen activity in over 3 months. They may be in maintenance mode, abandoned, or the team moved to other repos not included in the scan.`,
+          severity: "info",
+        });
+      } else if (days <= 7) {
+        out.push({
+          id: "active",
+          type: "coverage",
+          title: `Active project — last commit ${days === 0 ? "today" : `${days} day${days === 1 ? "" : "s"} ago`}`,
+          description: `The repos are under active development. Skill attribution data is current and reliable.`,
+          severity: "success",
+        });
+      }
+    }
+
+    return out;
+  }, [skillMap, onSelectPerson]);
+
+  const severityStyles: Record<Insight["severity"], { border: string; bg: string; icon: React.ReactNode; label: string }> = {
+    info: {
+      border: "border-l-blue-500/60",
+      bg: "bg-blue-500/5",
+      icon: <Lightbulb className="h-4 w-4 text-blue-500" />,
+      label: "Info",
+    },
+    warning: {
+      border: "border-l-amber-500/70",
+      bg: "bg-amber-500/5",
+      icon: <Target className="h-4 w-4 text-amber-500" />,
+      label: "Watch",
+    },
+    success: {
+      border: "border-l-emerald-500/60",
+      bg: "bg-emerald-500/5",
+      icon: <TrendingUp className="h-4 w-4 text-emerald-500" />,
+      label: "Strength",
+    },
+  };
+
+  const typeLabels: Record<Insight["type"], string> = {
+    gap: "Gap",
+    concentration: "Concentration",
+    opportunity: "Opportunity",
+    balance: "Balance",
+    coverage: "Coverage",
+  };
+
+  // Summary counts
+  const counts = useMemo(() => ({
+    warning: insights.filter((i) => i.severity === "warning").length,
+    info: insights.filter((i) => i.severity === "info").length,
+    success: insights.filter((i) => i.severity === "success").length,
+  }), [insights]);
+
+  return (
+    <div className="space-y-5 animate-fade-in-up">
+      {/* Header card with summary */}
+      <div className="rounded-xl border bg-card p-5 shadow-soft">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <div className="h-7 w-7 rounded-lg gradient-methodology flex items-center justify-center">
+                <Lightbulb className="h-4 w-4 text-white" />
+              </div>
+              <h3 className="text-sm font-semibold">Skill Insights & Recommendations</h3>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Auto-generated from the {skillMap.totalPeople}-person, {skillMap.totalCommits}-commit scan of <span className="font-mono">{skillMap.org}</span>. These are heuristic recommendations — use judgment when acting on them.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-500">{counts.warning}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Watch</div>
+          </div>
+          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{counts.info}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Info</div>
+          </div>
+          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{counts.success}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Strengths</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Insights list */}
+      <div className="space-y-2.5">
+        {insights.map((insight, i) => {
+          const style = severityStyles[insight.severity];
+          return (
+            <div
+              key={insight.id}
+              className={cn(
+                "rounded-xl border border-l-4 bg-card p-4 shadow-soft animate-fade-in-up hover:shadow-md transition-shadow",
+                style.border,
+                style.bg
+              )}
+              style={{ animationDelay: `${Math.min(i * 50, 400)}ms` }}
+            >
+              <div className="flex items-start gap-3">
+                <div className="shrink-0 mt-0.5">{style.icon}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                    <h4 className="text-sm font-semibold leading-snug">{insight.title}</h4>
+                    <Badge variant="outline" className="text-[9px] font-mono py-0 h-4">
+                      {typeLabels[insight.type]}
+                    </Badge>
+                  </div>
+                  <p className="text-[12px] text-muted-foreground leading-relaxed">{insight.description}</p>
+                  {insight.related && insight.related.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {insight.related.slice(0, 5).map((r) => (
+                        <span key={r} className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                          {r}
+                        </span>
+                      ))}
+                      {insight.related.length > 5 && (
+                        <span className="text-[10px] font-mono text-muted-foreground">+{insight.related.length - 5}</span>
+                      )}
+                    </div>
+                  )}
+                  {insight.actionLabel && insight.onAction && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-3 h-6 text-[11px] active-scale"
+                      onClick={insight.onAction}
+                    >
+                      {insight.actionLabel} <ArrowRight className="h-3 w-3 ml-1" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {insights.length === 0 && (
+          <div className="rounded-xl border bg-card p-8 text-center">
+            <Lightbulb className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No insights to surface yet. Run a deeper scan for more data.</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

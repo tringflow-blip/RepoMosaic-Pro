@@ -263,6 +263,15 @@ export type ChunkSkillExtraction = {
   /** Optional GLM-inferred "primary sector" for this chunk — used to roll up
    *  per-person sector scores. */
   primarySector: string | null;
+  /** ISO date strings (YYYY-MM-DD) of each commit in the chunk — used for the
+   *  activity heatmap. Optional so old cached scans (without dates) still load. */
+  dates?: string[];
+};
+
+/** Daily commit activity entry — used by the heatmap & activity timeline. */
+export type ActivityPoint = {
+  date: string; // YYYY-MM-DD
+  count: number;
 };
 
 /** Aggregated per-person skill record. */
@@ -282,6 +291,13 @@ export type PersonSkillRecord = {
   /** Flat list of every tag with full evidence — for the detail panel. */
   allTags: (SkillTag & { repo: string; commits: number })[];
   ownership: { repo: string; share: number; commits: number }[];
+  /** Daily commit activity for this person (sorted ascending by date). Empty
+   *  for old cached scans that don't have commit dates. */
+  activity: ActivityPoint[];
+  /** First commit date for this person (ISO). */
+  firstCommitDate: string | null;
+  /** Last commit date for this person (ISO). */
+  lastCommitDate: string | null;
 };
 
 export type AdvancedSkillMap = {
@@ -300,6 +316,11 @@ export type AdvancedSkillMap = {
   orgTech: { name: string; score: number; people: number; commits: number }[];
   orgMethodologies: { name: string; score: number; people: number; commits: number }[];
   orgRoles: { name: string; score: number; people: number; commits: number }[];
+  /** Org-wide daily commit activity (sorted ascending by date). */
+  activity: ActivityPoint[];
+  /** Org-wide first/last commit dates (ISO). */
+  firstCommitDate: string | null;
+  lastCommitDate: string | null;
 };
 
 /** Convert an aggregated skill map into a force-graph structure for the UI.

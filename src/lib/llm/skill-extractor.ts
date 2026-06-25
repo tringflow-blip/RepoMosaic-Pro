@@ -393,6 +393,9 @@ export async function extractSkillsForChunk(
     tags,
     summary: String(parsed.summary ?? "").slice(0, 400),
     primarySector: parsed.primarySector ? String(parsed.primarySector) : null,
+    /** Pass through commit dates so the aggregator can build a real activity
+     *  timeline without re-fetching from GitHub. */
+    dates: chunk.commits.map((c) => c.date).filter(Boolean),
     model,
     provider,
     failed,

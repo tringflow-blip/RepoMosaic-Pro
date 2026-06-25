@@ -1,0 +1,1249 @@
+     1→"use client";
+     2→
+     3→import { useMemo, useState } from "react";
+     4→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+     5→import { Badge } from "@/components/ui/badge";
+     6→import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+     7→import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+     8→import {
+     9→  Compass,
+    10→  Target,
+    11→  Wrench,
+    12→  Boxes,
+    13→  Shield,
+    14→  Users,
+    15→  GitCommitVertical,
+    16→  TrendingUp,
+    17→  Layers,
+    18→  Sparkles,
+    19→  Award,
+    20→  Link2,
+    21→  AlertTriangle,
+    22→  Grid3x3,
+    23→  ArrowRight,
+    24→  Radar,
+    25→  Flame,
+    26→  Info,
+    27→} from "lucide-react";
+    28→import { cn } from "@/lib/utils";
+    29→import type { AdvancedSkillMap, SkillDimension, PersonSkillRecord } from "@/lib/analysis/skill-taxonomy";
+    30→import {
+    31→  SECTOR_SEEDS,
+    32→  PROBLEM_TYPE_SEEDS,
+    33→  TECH_SEEDS,
+    34→  METHODOLOGY_SEEDS,
+    35→  ROLE_SEEDS,
+    36→} from "@/lib/analysis/skill-taxonomy";
+    37→
+    38→type Props = {
+    39→  skillMap: AdvancedSkillMap;
+    40→  /** Called when the user clicks a cell in the Person Similarity Matrix.
+    41→   *  Arguments are the two logins being compared. The parent should switch
+    42→   *  to the Skill Graph tab in compare mode with these two pre-selected. */
+    43→  onComparePair?: (loginA: string, loginB: string) => void;
+    44→};
+    45→
+    46→export function AnalyticsPanel({ skillMap, onComparePair }: Props) {
+    47→  const topPeople = skillMap.people.slice(0, 8);
+    48→
+    49→  return (
+    50→    <div className="space-y-4">
+    51→      {/* Summary stats strip */}
+    52→      <OrgSummaryStrip skillMap={skillMap} />
+    53→
+    54→      <div className="grid gap-4 lg:grid-cols-2">
+    55→        <LeaderboardCard
+    56→          title="Top Sectors"
+    57→          icon={<Compass className="h-4 w-4 text-sector" />}
+    58→          accent="bg-sector"
+    59→          items={skillMap.orgSectors.slice(0, 12)}
+    60→        />
+    61→        <LeaderboardCard
+    62→          title="Top Problem Types"
+    63→          icon={<Target className="h-4 w-4 text-problem" />}
+    64→          accent="bg-problem"
+    65→          items={skillMap.orgProblemTypes.slice(0, 12)}
+    66→        />
+    67→        <LeaderboardCard
+    68→          title="Top Tech"
+    69→          icon={<Wrench className="h-4 w-4 text-tech" />}
+    70→          accent="bg-tech"
+    71→          items={skillMap.orgTech.slice(0, 15)}
+    72→        />
+    73→        <LeaderboardCard
+    74→          title="Top Methodologies"
+    75→          icon={<Boxes className="h-4 w-4 text-methodology" />}
+    76→          accent="bg-methodology"
+    77→          items={skillMap.orgMethodologies.slice(0, 12)}
+    78→        />
+    79→        <LeaderboardCard
+    80→          title="Top Roles"
+    81→          icon={<Shield className="h-4 w-4 text-role" />}
+    82→          accent="bg-role"
+    83→          items={skillMap.orgRoles.slice(0, 10)}
+    84→        />
+    85→        <Card>
+    86→          <CardHeader>
+    87→            <CardTitle className="flex items-center gap-2 text-base">
+    88→              <Users className="h-4 w-4 text-people" /> Top Contributors
+    89→            </CardTitle>
+    90→            <CardDescription className="text-[11px]">
+    91→              By total commits scanned
+    92→            </CardDescription>
+    93→          </CardHeader>
+    94→          <CardContent className="space-y-2 max-h-[280px] overflow-y-auto pr-1">
+    95→            {topPeople.map((p, i) => (
+    96→              <div key={p.login} className="flex items-center gap-3">
+    97→                <span className="font-mono text-[10px] text-muted-foreground w-4">{i + 1}</span>
+    98→                <Avatar className="h-7 w-7">
+    99→                  <AvatarImage src={p.avatarUrl} />
+   100→                  <AvatarFallback>{p.login[0]?.toUpperCase()}</AvatarFallback>
+   101→                </Avatar>
+   102→                <div className="flex-1 min-w-0">
+   103→                  <div className="text-xs font-medium truncate">{p.name || p.login}</div>
+   104→                  <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+   105→                    <span className="flex items-center gap-0.5">
+   106→                      <GitCommitVertical className="h-2.5 w-2.5" />
+   107→                      {p.totalCommits}
+   108→                    </span>
+   109→                    <span>· {p.repos.length} repos</span>
+   110→                    <span>· {p.totalChunks} chunks</span>
+   111→                  </div>
+   112→                </div>
+   113→                {p.sectors[0] && (
+   114→                  <Badge variant="outline" className="text-[10px] border-sector/30 text-sector">
+   115→                    {p.sectors[0].name}
+   116→                  </Badge>
+   117→                )}
+   118→              </div>
+   119→            ))}
+   120→          </CardContent>
+   121→        </Card>
+   122→      </div>
+   123→
+   124→      {/* Team skill radar chart — overlays all people on 5 axes */}
+   125→      <TeamRadarChart skillMap={skillMap} />
+   126→
+   127→      {/* Skill co-occurrence */}
+   128→      <SkillCoOccurrenceCard skillMap={skillMap} />
+   129→
+   130→      {/* Skill coverage matrix — heatmap of people × top skills */}
+   131→      <SkillCoverageMatrix skillMap={skillMap} />
+   132→
+   133→      {/* Person-to-Person similarity matrix */}
+   134→      <PersonSimilarityMatrix skillMap={skillMap} onComparePair={onComparePair} />
+   135→
+   136→      {/* Skill gap analysis — what's missing from the team */}
+   137→      <SkillGapAnalysisCard skillMap={skillMap} />
+   138→    </div>
+   139→  );
+   140→}
+   141→
+   142→/** Compact strip of headline stats at the top of the Analytics tab. */
+   143→function OrgSummaryStrip({ skillMap }: { skillMap: AdvancedSkillMap }) {
+   144→  const totalUniqueSkills =
+   145→    skillMap.orgSectors.length +
+   146→    skillMap.orgProblemTypes.length +
+   147→    skillMap.orgTech.length +
+   148→    skillMap.orgMethodologies.length +
+   149→    skillMap.orgRoles.length;
+   150→
+   151→  const avgCommitsPerPerson = skillMap.totalPeople > 0
+   152→    ? Math.round(skillMap.totalCommits / skillMap.totalPeople)
+   153→    : 0;
+   154→  const avgChunksPerPerson = skillMap.totalPeople > 0
+   155→    ? Math.round(skillMap.totalChunks / skillMap.totalPeople)
+   156→    : 0;
+   157→
+   158→  // Most diverse person (most unique skills across all dimensions)
+   159→  const mostDiverse = skillMap.people
+   160→    .map((p) => ({
+   161→      login: p.login,
+   162→      name: p.name || p.login,
+   163→      avatarUrl: p.avatarUrl,
+   164→      unique: p.sectors.length + p.problemTypes.length + p.tech.length + p.methodologies.length + p.roles.length,
+   165→      sectors: p.sectors.length,
+   166→    }))
+   167→    .sort((a, b) => b.unique - a.unique)[0];
+   168→
+   169→  // Most common sector
+   170→  const topSector = skillMap.orgSectors[0];
+   171→
+   172→  const stats = [
+   173→    {
+   174→      icon: <Users className="h-4 w-4 text-people" />,
+   175→      label: "People",
+   176→      value: skillMap.totalPeople,
+   177→      sub: `${skillMap.totalRepos} repos scanned`,
+   178→    },
+   179→    {
+   180→      icon: <GitCommitVertical className="h-4 w-4 text-muted-foreground" />,
+   181→      label: "Commits",
+   182→      value: skillMap.totalCommits,
+   183→      sub: `${avgCommitsPerPerson} avg / person`,
+   184→    },
+   185→    {
+   186→      icon: <Layers className="h-4 w-4 text-primary" />,
+   187→      label: "LLM chunks",
+   188→      value: skillMap.totalChunks,
+   189→      sub: `${avgChunksPerPerson} avg / person`,
+   190→    },
+   191→    {
+   192→      icon: <Sparkles className="h-4 w-4 text-sector" />,
+   193→      label: "Unique skills",
+   194→      value: totalUniqueSkills,
+   195→      sub: "across 5 dimensions",
+   196→    },
+   197→    {
+   198→      icon: <Award className="h-4 w-4 text-amber-500" />,
+   199→      label: "Most diverse",
+   200→      value: mostDiverse?.name ?? "—",
+   201→      sub: mostDiverse ? `${mostDiverse.unique} skills · ${mostDiverse.sectors} sectors` : "no data",
+   202→      isText: true,
+   203→    },
+   204→    {
+   205→      icon: <Compass className="h-4 w-4 text-sector" />,
+   206→      label: "Top sector",
+   207→      value: topSector?.name ?? "—",
+   208→      sub: topSector ? `${topSector.people}p · ${topSector.commits}c` : "no data",
+   209→      isText: true,
+   210→    },
+   211→  ];
+   212→
+   213→  return (
+   214→    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+   215→      {stats.map((s, i) => (
+   216→        <Card key={s.label} className="overflow-hidden relative group">
+   217→          <div className={cn("absolute inset-x-0 top-0 h-0.5", getAccentForLabel(s.label))} />
+   218→          <CardContent className="p-3 pt-3">
+   219→            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+   220→              {s.icon}
+   221→              {s.label}
+   222→            </div>
+   223→            <div
+   224→              className={cn(
+   225→                "font-mono font-semibold truncate transition-transform group-hover:-translate-y-0.5",
+   226→                s.isText ? "text-sm" : "text-xl tabular-nums"
+   227→              )}
+   228→              title={String(s.value)}
+   229→            >
+   230→              {s.value}
+   231→            </div>
+   232→            <div className="text-[10px] text-muted-foreground mt-0.5 truncate" title={s.sub}>{s.sub}</div>
+   233→            {i === 0 && skillMap.totalPeople > 0 && (
+   234→              <div className="mt-1.5 flex -space-x-1.5">
+   235→                {skillMap.people.slice(0, 5).map((p) => (
+   236→                  <Avatar key={p.login} className="h-4 w-4 border border-card rounded-full">
+   237→                    <AvatarImage src={p.avatarUrl} />
+   238→                    <AvatarFallback className="text-[7px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+   239→                  </Avatar>
+   240→                ))}
+   241→                {skillMap.people.length > 5 && (
+   242→                  <span className="h-4 w-4 rounded-full bg-muted border border-card flex items-center justify-center text-[7px] font-mono">
+   243→                    +{skillMap.people.length - 5}
+   244→                  </span>
+   245→                )}
+   246→              </div>
+   247→            )}
+   248→          </CardContent>
+   249→        </Card>
+   250→      ))}
+   251→    </div>
+   252→  );
+   253→}
+   254→
+   255→function getAccentForLabel(label: string): string {
+   256→  if (/people/i.test(label)) return "bg-people";
+   257→  if (/commits/i.test(label)) return "bg-muted-foreground/40";
+   258→  if (/chunks/i.test(label)) return "bg-primary";
+   259→  if (/skills/i.test(label)) return "bg-sector";
+   260→  if (/diverse/i.test(label)) return "bg-amber-500";
+   261→  if (/sector/i.test(label)) return "bg-sector";
+   262→  return "bg-primary";
+   263→}
+   264→
+   265→/** Compute and display which skills tend to co-occur in the same chunks.
+   266→ *  Uses the per-person `allTags` flat list — any two tags that appear for the
+   267→ *  same person+repo are considered co-occurring. */
+   268→function SkillCoOccurrenceCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
+   269→  const pairs = useMemo(() => {
+   270→    // Group all tags by (person, repo) to find co-occurrences
+   271→    const byKey = new Map<string, { name: string; dimension: SkillDimension }[]>();
+   272→    for (const p of skillMap.people) {
+   273→      for (const t of p.allTags) {
+   274→        const key = `${p.login}::${t.repo}`;
+   275→        if (!byKey.has(key)) byKey.set(key, []);
+   276→        byKey.get(key)!.push({ name: t.name, dimension: t.dimension });
+   277→      }
+   278→    }
+   279→
+   280→    // Count pairs (only across different dimensions to avoid trivial self-pairs)
+   281→    const pairCounts = new Map<string, { a: string; b: string; count: number }>();
+   282→    for (const tags of byKey.values()) {
+   283→      const unique = Array.from(new Set(tags.map((t) => t.name)));
+   284→      for (let i = 0; i < unique.length; i++) {
+   285→        for (let j = i + 1; j < unique.length; j++) {
+   286→          const [a, b] = [unique[i], unique[j]].sort();
+   287→          const key = `${a}||${b}`;
+   288→          if (!pairCounts.has(key)) {
+   289→            pairCounts.set(key, { a, b, count: 0 });
+   290→          }
+   291→          pairCounts.get(key)!.count++;
+   292→        }
+   293→      }
+   294→    }
+   295→
+   296→    return Array.from(pairCounts.values())
+   297→      .filter((p) => p.count >= 2)
+   298→      .sort((a, b) => b.count - a.count)
+   299→      .slice(0, 20);
+   300→  }, [skillMap]);
+   301→
+   302→  if (pairs.length === 0) return null;
+   303→
+   304→  const maxCount = Math.max(1, ...pairs.map((p) => p.count));
+   305→
+   306→  return (
+   307→    <Card>
+   308→      <CardHeader>
+   309→        <CardTitle className="flex items-center gap-2 text-base">
+   310→          <Link2 className="h-4 w-4 text-primary" />
+   311→          Skill Co-occurrence
+   312→        </CardTitle>
+   313→        <CardDescription className="text-[11px] flex items-center gap-1">
+   314→          <TrendingUp className="h-3 w-3" />
+   315→          Skills that frequently appear together in the same person's work — reveals tech-stack clusters and cross-cutting capabilities
+   316→        </CardDescription>
+   317→      </CardHeader>
+   318→      <CardContent className="space-y-1.5 max-h-[320px] overflow-y-auto pr-1">
+   319→        {pairs.map((p, i) => (
+   320→          <div key={`${p.a}-${p.b}`} className="flex items-center gap-3 text-[11px]">
+   321→            <span className="font-mono text-muted-foreground w-5">{i + 1}</span>
+   322→            <div className="flex-1 min-w-0 flex items-center gap-1.5">
+   323→              <span className="font-medium truncate">{p.a}</span>
+   324→              <Link2 className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+   325→              <span className="font-medium truncate">{p.b}</span>
+   326→            </div>
+   327→            <span className="text-muted-foreground font-mono text-[10px] whitespace-nowrap">
+   328→              {p.count}× co-occur
+   329→            </span>
+   330→            <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden shrink-0">
+   331→              <div
+   332→                className="h-full bg-primary"
+   333→                style={{ width: `${(p.count / maxCount) * 100}%` }}
+   334→              />
+   335→            </div>
+   336→          </div>
+   337→        ))}
+   338→      </CardContent>
+   339→    </Card>
+   340→  );
+   341→}
+   342→
+   343→function LeaderboardCard({
+   344→  title,
+   345→  icon,
+   346→  accent,
+   347→  items,
+   348→}: {
+   349→  title: string;
+   350→  icon: React.ReactNode;
+   351→  accent: string;
+   352→  items: { name: string; score: number; commits: number; people: number }[];
+   353→}) {
+   354→  const max = Math.max(1, ...items.map((i) => i.commits));
+   355→  const totalCommits = items.reduce((sum, i) => sum + i.commits, 0);
+   356→  return (
+   357→    <Card>
+   358→      <CardHeader className="pb-3">
+   359→        <CardTitle className="flex items-center gap-2 text-base">
+   360→          {icon}
+   361→          {title}
+   362→        </CardTitle>
+   363→        <CardDescription className="text-[11px] flex items-center gap-1">
+   364→          <TrendingUp className="h-3 w-3" /> {items.length} tags · {totalCommits} total commits
+   365→        </CardDescription>
+   366→      </CardHeader>
+   367→      <CardContent className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+   368→        {items.length === 0 && (
+   369→          <div className="text-sm text-muted-foreground text-center py-4">No tags yet.</div>
+   370→        )}
+   371→        {items.map((item, i) => {
+   372→          const pctOfMax = (item.commits / max) * 100;
+   373→          const pctOfTotal = totalCommits > 0 ? (item.commits / totalCommits) * 100 : 0;
+   374→          return (
+   375→            <div
+   376→              key={item.name}
+   377→              className="group flex items-center gap-2 text-[11px] py-1 px-1 rounded hover:bg-muted/40 -mx-1 transition-colors"
+   378→            >
+   379→              <span className="font-mono text-muted-foreground w-4 text-right tabular-nums">{i + 1}</span>
+   380→              <span className="font-medium flex-1 truncate" title={item.name}>
+   381→                {item.name}
+   382→              </span>
+   383→              <span className="text-muted-foreground font-mono text-[10px] whitespace-nowrap tabular-nums">
+   384→                {item.people}p · {item.commits}c
+   385→              </span>
+   386→              <span className="text-muted-foreground/80 font-mono text-[9px] w-9 text-right tabular-nums">
+   387→                {pctOfTotal.toFixed(0)}%
+   388→              </span>
+   389→              <div className="w-20 h-2 rounded-full bg-muted overflow-hidden shrink-0 relative">
+   390→                <div
+   391→                  className={cn("h-full transition-all group-hover:brightness-110", accent)}
+   392→                  style={{ width: `${pctOfMax}%` }}
+   393→                />
+   394→              </div>
+   395→            </div>
+   396→          );
+   397→        })}
+   398→      </CardContent>
+   399→    </Card>
+   400→  );
+   401→}
+   402→
+   403→/** Interactive heatmap of people × top skills across a chosen dimension.
+   404→ *  Each cell shows commit volume for that (person, skill) pair, with color
+   405→ *  intensity scaled to the max in the matrix. Clicking a row/column header
+   406→ *  pins it for closer inspection. */
+   407→function SkillCoverageMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
+   408→  const [dimension, setDimension] = useState<SkillDimension>("sector");
+   409→  const [pinnedSkill, setPinnedSkill] = useState<string | null>(null);
+   410→
+   411→  const { people, skills, matrix, maxCell } = useMemo(() => {
+   412→    // Pick the right org-wide list for the active dimension
+   413→    const orgList =
+   414→      dimension === "sector" ? skillMap.orgSectors :
+   415→      dimension === "problemType" ? skillMap.orgProblemTypes :
+   416→      dimension === "tech" ? skillMap.orgTech :
+   417→      dimension === "methodology" ? skillMap.orgMethodologies : skillMap.orgRoles;
+   418→
+   419→    const skills = orgList.slice(0, 12).map((s) => s.name);
+   420→
+   421→    // Build matrix[personIndex][skillIndex] = commit count
+   422→    const people = skillMap.people.slice(0, 12);
+   423→    const matrix: number[][] = people.map((p) => {
+   424→      const list =
+   425→        dimension === "sector" ? p.sectors :
+   426→        dimension === "problemType" ? p.problemTypes :
+   427→        dimension === "tech" ? p.tech :
+   428→        dimension === "methodology" ? p.methodologies : p.roles;
+   429→      const lookup = new Map(list.map((s) => [s.name, s.commits]));
+   430→      return skills.map((sk) => lookup.get(sk) ?? 0);
+   431→    });
+   432→
+   433→    const maxCell = Math.max(1, ...matrix.flat());
+   434→    return { people, skills, matrix, maxCell };
+   435→  }, [skillMap, dimension]);
+   436→
+   437→  if (people.length === 0 || skills.length === 0) return null;
+   438→
+   439→  const accentVar =
+   440→    dimension === "sector" ? "var(--sector)" :
+   441→    dimension === "problemType" ? "var(--problem)" :
+   442→    dimension === "tech" ? "var(--tech)" :
+   443→    dimension === "methodology" ? "var(--methodology)" : "var(--role)";
+   444→
+   445→  const dimLabel =
+   446→    dimension === "problemType" ? "Problem Types" : `${dimension.charAt(0).toUpperCase() + dimension.slice(1)}s`;
+   447→
+   448→  return (
+   449→    <Card>
+   450→      <CardHeader className="pb-3">
+   451→        <div className="flex flex-wrap items-start justify-between gap-3">
+   452→          <div>
+   453→            <CardTitle className="flex items-center gap-2 text-base">
+   454→              <Layers className="h-4 w-4 text-primary" />
+   455→              Skill Coverage Matrix
+   456→            </CardTitle>
+   457→            <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
+   458→              <TrendingUp className="h-3 w-3" />
+   459→              Heatmap of {people.length} top contributors × top {skills.length} {dimLabel.toLowerCase()} · darker = more commits
+   460→            </CardDescription>
+   461→          </div>
+   462→          <Tabs value={dimension} onValueChange={(v) => { setDimension(v as SkillDimension); setPinnedSkill(null); }}>
+   463→            <TabsList className="h-8">
+   464→              {([
+   465→                { k: "sector", l: "Sector" },
+   466→                { k: "problemType", l: "Problem" },
+   467→                { k: "tech", l: "Tech" },
+   468→                { k: "methodology", l: "Method" },
+   469→                { k: "role", l: "Role" },
+   470→              ] as { k: SkillDimension; l: string }[]).map((d) => (
+   471→                <TabsTrigger key={d.k} value={d.k} className="text-[10px] px-2 h-7">
+   472→                  {d.l}
+   473→                </TabsTrigger>
+   474→              ))}
+   475→            </TabsList>
+   476→          </Tabs>
+   477→        </div>
+   478→      </CardHeader>
+   479→      <CardContent className="overflow-x-auto">
+   480→        <table className="w-full border-separate border-spacing-1">
+   481→          <thead>
+   482→            <tr>
+   483→              <th className="sticky left-0 z-10 bg-card p-1.5 text-left text-[10px] font-medium text-muted-foreground min-w-[120px]">
+   484→                Person
+   485→              </th>
+   486→              {skills.map((s) => (
+   487→                <th
+   488→                  key={s}
+   489→                  className={cn(
+   490→                    "p-1.5 text-[9px] font-medium cursor-pointer transition-colors rounded select-none",
+   491→                    pinnedSkill === s ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground"
+   492→                  )}
+   493→                  onClick={() => setPinnedSkill(pinnedSkill === s ? null : s)}
+   494→                  title={`Click to pin ${s}`}
+   495→                >
+   496→                  <div className="writing-vertical-rl rotate-180 truncate max-h-[80px] mx-auto" style={{ writingMode: "vertical-rl" }}>
+   497→                    {s}
+   498→                  </div>
+   499→                </th>
+   500→              ))}
+   501→            </tr>
+   502→          </thead>
+   503→          <tbody>
+   504→            {people.map((p, ri) => (
+   505→              <tr key={p.login}>
+   506→                <td className="sticky left-0 z-10 bg-card p-1.5 text-[10px] font-medium whitespace-nowrap">
+   507→                  <div className="flex items-center gap-1.5">
+   508→                    <Avatar className="h-5 w-5 shrink-0">
+   509→                      <AvatarImage src={p.avatarUrl} />
+   510→                      <AvatarFallback className="text-[8px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+   511→                    </Avatar>
+   512→                    <span className="truncate max-w-[100px]" title={p.name || p.login}>{p.name || p.login}</span>
+   513→                  </div>
+   514→                </td>
+   515→                {skills.map((s, ci) => {
+   516→                  const v = matrix[ri][ci];
+   517→                  const intensity = v / maxCell;
+   518→                  const isPinned = pinnedSkill === s;
+   519→                  return (
+   520→                    <td
+   521→                      key={s}
+   522→                      className={cn(
+   523→                        "p-0 text-center align-middle transition-all",
+   524→                        isPinned && "ring-2 ring-primary/40 ring-offset-1 ring-offset-card rounded"
+   525→                      )}
+   526→                      title={`${p.name || p.login} · ${s}: ${v} commits`}
+   527→                    >
+   528→                      <div
+   529→                        className="h-9 min-w-[36px] rounded flex items-center justify-center text-[10px] font-mono font-semibold tabular-nums cursor-pointer hover:scale-105 transition-transform"
+   530→                        style={{
+   531→                          backgroundColor: v === 0
+   532→                            ? "var(--muted)"
+   533→                            : `color-mix(in oklch, ${accentVar} ${15 + intensity * 70}%, var(--card))`,
+   534→                          color: v === 0
+   535→                            ? "transparent"
+   536→                            : intensity > 0.5
+   537→                              ? "oklch(0.99 0 0)"
+   538→                              : "var(--foreground)",
+   539→                        }}
+   540→                      >
+   541→                        {v === 0 ? "·" : v}
+   542→                      </div>
+   543→                    </td>
+   544→                  );
+   545→                })}
+   546→              </tr>
+   547→            ))}
+   548→          </tbody>
+   549→        </table>
+   550→        <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
+   551→          <div className="flex items-center gap-1.5">
+   552→            <span>Low</span>
+   553→            <div className="flex">
+   554→              {[0.1, 0.3, 0.5, 0.7, 0.9].map((i) => (
+   555→                <div
+   556→                  key={i}
+   557→                  className="h-3 w-5"
+   558→                  style={{ backgroundColor: `color-mix(in oklch, ${accentVar} ${15 + i * 70}%, var(--card))` }}
+   559→                />
+   560→              ))}
+   561→            </div>
+   562→            <span>High · {maxCell}c max</span>
+   563→          </div>
+   564→          {pinnedSkill && (
+   565→            <button
+   566→              type="button"
+   567→              onClick={() => setPinnedSkill(null)}
+   568→              className="hover:text-foreground transition-colors"
+   569→            >
+   570→              Clear pin ({pinnedSkill}) ×
+   571→            </button>
+   572→          )}
+   573→        </div>
+   574→      </CardContent>
+   575→    </Card>
+   576→  );
+   577→}
+   578→
+   579→/** Person-to-Person similarity matrix — NxN grid of overall Jaccard similarity.
+   580→ *  Helps spot skill-cluster overlaps at a glance. Hover a cell to see exact %,
+   581→ *  click an off-diagonal cell to open the Skill Graph in compare mode with
+   582→ *  that pair pre-selected (requires onComparePair). */
+   583→function PersonSimilarityMatrix({
+   584→  skillMap,
+   585→  onComparePair,
+   586→}: {
+   587→  skillMap: AdvancedSkillMap;
+   588→  onComparePair?: (loginA: string, loginB: string) => void;
+   589→}) {
+   590→  const people = skillMap.people.slice(0, 10);
+   591→  const [hovered, setHovered] = useState<{ i: number; j: number } | null>(null);
+   592→
+   593→  // Precompute Jaccard for every pair
+   594→  const matrix = useMemo(() => {
+   595→    const dimLists = (p: PersonSkillRecord) => [
+   596→      ...p.sectors, ...p.problemTypes, ...p.tech, ...p.methodologies, ...p.roles,
+   597→    ].map((s) => s.name);
+   598→    const nameSets = people.map((p) => new Set(dimLists(p)));
+   599→    return people.map((_, i) =>
+   600→      people.map((_, j) => {
+   601→        if (i === j) return { jaccard: 1, shared: nameSets[i].size, union: nameSets[i].size };
+   602→        const a = nameSets[i];
+   603→        const b = nameSets[j];
+   604→        let shared = 0;
+   605→        for (const n of a) if (b.has(n)) shared++;
+   606→        const union = a.size + b.size - shared;
+   607→        return { jaccard: union > 0 ? shared / union : 0, shared, union };
+   608→      })
+   609→    );
+   610→  }, [people]);
+   611→
+   612→  if (people.length < 2) return null;
+   613→
+   614→  const cellColor = (j: number) => {
+   615→    if (j >= 0.7) return "oklch(0.70 0.13 145)";
+   616→    if (j >= 0.4) return "oklch(0.75 0.10 145)";
+   617→    if (j >= 0.2) return "oklch(0.82 0.06 95)";
+   618→    if (j > 0) return "oklch(0.80 0.07 50)";
+   619→    return "var(--muted)";
+   620→  };
+   621→
+   622→  return (
+   623→    <Card>
+   624→      <CardHeader className="pb-3">
+   625→        <div className="flex items-start justify-between gap-3">
+   626→          <div>
+   627→            <CardTitle className="flex items-center gap-2 text-base">
+   628→              <Grid3x3 className="h-4 w-4 text-primary" />
+   629→              Person Similarity Matrix
+   630→            </CardTitle>
+   631→            <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
+   632→              <TrendingUp className="h-3 w-3" />
+   633→              Jaccard similarity across all 5 dimensions · darker green = more overlap · {people.length}×{people.length} grid
+   634→            </CardDescription>
+   635→          </div>
+   636→        </div>
+   637→      </CardHeader>
+   638→      <CardContent className="overflow-x-auto">
+   639→        <table className="border-separate border-spacing-1 mx-auto">
+   640→          <thead>
+   641→            <tr>
+   642→              <th className="p-1.5"></th>
+   643→              {people.map((p, j) => (
+   644→                <th key={p.login} className="p-1 text-[9px] font-medium text-muted-foreground align-bottom">
+   645→                  <div className="writing-vertical-rl rotate-180 mx-auto max-h-[70px] truncate" style={{ writingMode: "vertical-rl" }} title={p.name || p.login}>
+   646→                    {p.name || p.login}
+   647→                  </div>
+   648→                </th>
+   649→              ))}
+   650→            </tr>
+   651→          </thead>
+   652→          <tbody>
+   653→            {people.map((p, i) => (
+   654→              <tr key={p.login}>
+   655→                <td className="p-1 text-[10px] font-medium text-right whitespace-nowrap pr-2 max-w-[110px]">
+   656→                  <div className="flex items-center gap-1.5 justify-end">
+   657→                    <span className="truncate max-w-[90px]" title={p.name || p.login}>{p.name || p.login}</span>
+   658→                    <Avatar className="h-4 w-4 shrink-0">
+   659→                      <AvatarImage src={p.avatarUrl} />
+   660→                      <AvatarFallback className="text-[7px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+   661→                    </Avatar>
+   662→                  </div>
+   663→                </td>
+   664→                {people.map((_, j) => {
+   665→                  const v = matrix[i][j];
+   666→                  const isDiag = i === j;
+   667→                  const isHovered = hovered?.i === i && hovered?.j === j;
+   668→                  const canClick = !isDiag && onComparePair;
+   669→                  return (
+   670→                    <td
+   671→                      key={j}
+   672→                      className="p-0 text-center align-middle"
+   673→                      onMouseEnter={() => setHovered({ i, j })}
+   674→                      onMouseLeave={() => setHovered(null)}
+   675→                      title={isDiag
+   676→                        ? `${p.name || p.login} (self)`
+   677→                        : `${p.name || p.login} vs ${people[j].name || people[j].login}: ${(v.jaccard * 100).toFixed(0)}% (${v.shared}/${v.union} shared)${canClick ? " · click to compare" : ""}`}
+   678→                    >
+   679→                      <button
+   680→                        type="button"
+   681→                        disabled={!canClick}
+   682→                        onClick={() => {
+   683→                          if (canClick) onComparePair(p.login, people[j].login);
+   684→                        }}
+   685→                        className={cn(
+   686→                          "h-9 w-9 rounded flex items-center justify-center text-[10px] font-mono font-semibold tabular-nums transition-all",
+   687→                          isDiag
+   688→                            ? "ring-1 ring-inset ring-border cursor-default"
+   689→                            : canClick
+   690→                              ? "cursor-pointer hover:ring-2 hover:ring-primary/60 hover:scale-110"
+   691→                              : "cursor-default",
+   692→                          isHovered && !isDiag && "ring-2 ring-primary/60 scale-110"
+   693→                        )}
+   694→                        style={{
+   695→                          backgroundColor: cellColor(v.jaccard),
+   696→                          color: v.jaccard >= 0.4 ? "oklch(0.20 0 0)" : "var(--foreground)",
+   697→                        }}
+   698→                      >
+   699→                        {isDiag ? "—" : Math.round(v.jaccard * 100)}
+   700→                      </button>
+   701→                    </td>
+   702→                  );
+   703→                })}
+   704→              </tr>
+   705→            ))}
+   706→          </tbody>
+   707→        </table>
+   708→        <div className="mt-3 flex items-center justify-center gap-3 text-[10px] text-muted-foreground">
+   709→          <div className="flex items-center gap-1.5">
+   710→            <span>Low</span>
+   711→            <div className="flex gap-0.5">
+   712→              {[0, 0.1, 0.25, 0.5, 0.75].map((i) => (
+   713→                <div key={i} className="h-3 w-5 rounded-sm" style={{ backgroundColor: cellColor(i) }} />
+   714→              ))}
+   715→            </div>
+   716→            <span>High</span>
+   717→          </div>
+   718→          <span className="text-[10px] text-muted-foreground/70">·</span>
+   719→          <span>{onComparePair ? "Click a cell to compare · " : ""}Hover for details · diagonal = self</span>
+   720→        </div>
+   721→      </CardContent>
+   722→    </Card>
+   723→  );
+   724→}
+   725→
+   726→/** Skill Gap Analysis — compares the team's actual skills to the seed taxonomy
+   727→ *  and highlights the seeds that NO person has. Useful for spotting "what's
+   728→ *  missing" when planning hires or training. */
+   729→function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
+   730→  const [dimension, setDimension] = useState<SkillDimension>("role");
+   731→
+   732→  const { present, missing } = useMemo(() => {
+   733→    const seeds =
+   734→      dimension === "sector" ? SECTOR_SEEDS :
+   735→      dimension === "problemType" ? PROBLEM_TYPE_SEEDS :
+   736→      dimension === "tech" ? TECH_SEEDS :
+   737→      dimension === "methodology" ? METHODOLOGY_SEEDS : ROLE_SEEDS;
+   738→
+   739→    const orgList =
+   740→      dimension === "sector" ? skillMap.orgSectors :
+   741→      dimension === "problemType" ? skillMap.orgProblemTypes :
+   742→      dimension === "tech" ? skillMap.orgTech :
+   743→      dimension === "methodology" ? skillMap.orgMethodologies : skillMap.orgRoles;
+   744→
+   745→    // Build a normalized set of present names so "React" matches "react"
+   746→    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+   747→    const presentNames = new Set(orgList.map((s) => normalize(s.name)));
+   748→    const present = seeds.filter((s) => presentNames.has(normalize(s)));
+   749→    const missing = seeds.filter((s) => !presentNames.has(normalize(s)));
+   750→    return { present, missing };
+   751→  }, [skillMap, dimension]);
+   752→
+   753→  const accentVar =
+   754→    dimension === "sector" ? "var(--sector)" :
+   755→    dimension === "problemType" ? "var(--problem)" :
+   756→    dimension === "tech" ? "var(--tech)" :
+   757→    dimension === "methodology" ? "var(--methodology)" : "var(--role)";
+   758→
+   759→  const dimLabel =
+   760→    dimension === "problemType" ? "Problem Types" : `${dimension.charAt(0).toUpperCase() + dimension.slice(1)}s`;
+   761→
+   762→  // Map a few seeds to human-friendly descriptions of what they enable
+   763→  const seedDescription: Record<string, string> = {
+   764→    "Testing & QA": "Test coverage, regression safety",
+   765→    "CI/CD & Release Engineering": "Automated build / ship pipelines",
+   766→    "Observability & Monitoring": "Logs, metrics, traces, alerting",
+   767→    "Infrastructure as Code": "Reproducible infra provisioning",
+   768→    "Accessibility": "a11y for users with disabilities",
+   769→    "Internationalization": "Multi-language / locale support",
+   770→    "Encryption & Crypto": "Data protection at rest / in transit",
+   771→    "Compliance & Audit": "SOC2 / GDPR / HIPAA controls",
+   772→    "Vector Search & RAG": "Semantic retrieval for LLMs",
+   773→    "LLM Orchestration": "Multi-step LLM workflows",
+   774→    "Microservices": "Decomposed service architecture",
+   775→    "Domain-Driven Design": "Bounded contexts, ubiquitous language",
+   776→    "Test-Driven Development": "Red-green-refactor loop",
+   777→    "Pair Programming": "Two-mind knowledge transfer",
+   778→    "Documentation": "Guides, API references, ADRs",
+   779→    "Mentoring": "Leveling up junior engineers",
+   780→    "Performance Optimization": "Latency, throughput, profiling",
+   781→    "Security Hardening": "Threat modeling, vuln remediation",
+   782→  };
+   783→
+   784→  // Severity classification for missing seeds — helps prioritize hiring/training.
+   785→  // Critical = security/reliability/compliance gaps that pose real risk.
+   786→  // Important = foundational engineering practices the team likely needs.
+   787→  // Nice-to-have = specialized skills that depend on the product direction.
+   788→  const CRITICAL_SEEDS = new Set([
+   789→    "Testing & QA",
+   790→    "Security Hardening",
+   791→    "Encryption & Crypto",
+   792→    "Compliance & Audit",
+   793→    "Observability & Monitoring",
+   794→    "Authentication & Identity",
+   795→    "Authorization & Access Control",
+   796→  ]);
+   797→  const IMPORTANT_SEEDS = new Set([
+   798→    "CI/CD & Release Engineering",
+   799→    "Infrastructure as Code",
+   800→    "Architecture",
+   801→    "API Design",
+   802→    "Release Management",
+   803→    "Documentation",
+   804→    "Code Review",
+   805→    "Mentoring",
+   806→    "Test-Driven Development",
+   807→    "Domain-Driven Design",
+   808→    "Performance Optimization",
+   809→    "Internationalization",
+   810→    "Accessibility",
+   811→  ]);
+   812→  const severityFor = (seed: string): "critical" | "important" | "nice" => {
+   813→    if (CRITICAL_SEEDS.has(seed)) return "critical";
+   814→    if (IMPORTANT_SEEDS.has(seed)) return "important";
+   815→    return "nice";
+   816→  };
+   817→  const severityMeta = {
+   818→    critical: {
+   819→      label: "Critical",
+   820→      icon: <Flame className="h-2.5 w-2.5" />,
+   821→      // red-700 / rose — high contrast
+   822→      className: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+   823→      dot: "bg-rose-500",
+   824→    },
+   825→    important: {
+   826→      label: "Important",
+   827→      icon: <AlertTriangle className="h-2.5 w-2.5" />,
+   828→      className: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+   829→      dot: "bg-amber-500",
+   830→    },
+   831→    nice: {
+   832→      label: "Nice-to-have",
+   833→      icon: <Info className="h-2.5 w-2.5" />,
+   834→      className: "border-sky-500/30 bg-sky-500/5 text-sky-600 dark:text-sky-400",
+   835→      dot: "bg-sky-500",
+   836→    },
+   837→  } as const;
+   838→
+   839→  // Sort missing seeds by severity (critical first, then important, then nice)
+   840→  const sevOrder = { critical: 0, important: 1, nice: 2 } as const;
+   841→  const sortedMissing = [...missing].sort((a, b) => {
+   842→    const sa = severityFor(a);
+   843→    const sb = severityFor(b);
+   844→    if (sevOrder[sa] !== sevOrder[sb]) return sevOrder[sa] - sevOrder[sb];
+   845→    return a.localeCompare(b);
+   846→  });
+   847→
+   848→  // Count by severity
+   849→  const sevCounts = {
+   850→    critical: missing.filter((s) => severityFor(s) === "critical").length,
+   851→    important: missing.filter((s) => severityFor(s) === "important").length,
+   852→    nice: missing.filter((s) => severityFor(s) === "nice").length,
+   853→  };
+   854→
+   855→  return (
+   856→    <Card>
+   857→      <CardHeader className="pb-3">
+   858→        <div className="flex flex-wrap items-start justify-between gap-3">
+   859→          <div>
+   860→            <CardTitle className="flex items-center gap-2 text-base">
+   861→              <AlertTriangle className="h-4 w-4 text-amber-500" />
+   862→              Skill Gap Analysis
+   863→            </CardTitle>
+   864→            <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
+   865→              <ArrowRight className="h-3 w-3" />
+   866→              Seed taxonomy items the team has NOT touched · {missing.length} of {present.length + missing.length} {dimLabel.toLowerCase()} missing
+   867→            </CardDescription>
+   868→          </div>
+   869→          <Tabs value={dimension} onValueChange={(v) => setDimension(v as SkillDimension)}>
+   870→            <TabsList className="h-8">
+   871→              {([
+   872→                { k: "sector", l: "Sector" },
+   873→                { k: "problemType", l: "Problem" },
+   874→                { k: "tech", l: "Tech" },
+   875→                { k: "methodology", l: "Method" },
+   876→                { k: "role", l: "Role" },
+   877→              ] as { k: SkillDimension; l: string }[]).map((d) => (
+   878→                <TabsTrigger key={d.k} value={d.k} className="text-[10px] px-2 h-7">
+   879→                  {d.l}
+   880→                </TabsTrigger>
+   881→              ))}
+   882→            </TabsList>
+   883→          </Tabs>
+   884→        </div>
+   885→      </CardHeader>
+   886→      <CardContent>
+   887→        {missing.length === 0 ? (
+   888→          <div className="text-sm text-muted-foreground text-center py-8">
+   889→            <Sparkles className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
+   890→            <div className="font-medium text-foreground">No gaps detected</div>
+   891→            <div className="text-[11px] mt-1">Every seed {dimLabel.toLowerCase()} appears in at least one commit.</div>
+   892→          </div>
+   893→        ) : (
+   894→          <>
+   895→            {/* Severity legend / summary chips */}
+   896→            <div className="flex flex-wrap items-center gap-2 mb-3">
+   897→              <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">
+   898→                Severity:
+   899→              </span>
+   900→              {(["critical", "important", "nice"] as const).map((sev) => {
+   901→                const m = severityMeta[sev];
+   902→                const count = sevCounts[sev];
+   903→                if (count === 0) return null;
+   904→                return (
+   905→                  <span
+   906→                    key={sev}
+   907→                    className={cn(
+   908→                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium",
+   909→                      m.className
+   910→                    )}
+   911→                  >
+   912→                    {m.icon}
+   913→                    {m.label}
+   914→                    <span className="font-mono tabular-nums opacity-70">· {count}</span>
+   915→                  </span>
+   916→                );
+   917→              })}
+   918→            </div>
+   919→
+   920→            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+   921→              {sortedMissing.map((s) => {
+   922→                const sev = severityFor(s);
+   923→                const m = severityMeta[sev];
+   924→                return (
+   925→                  <div
+   926→                    key={s}
+   927→                    className={cn(
+   928→                      "group flex items-start gap-2 p-3 rounded-md border transition-all hover:scale-[1.01]",
+   929→                      m.className
+   930→                    )}
+   931→                    title={`${s} — ${m.label}`}
+   932→                  >
+   933→                    <div
+   934→                      className={cn("mt-1 h-1.5 w-1.5 rounded-full shrink-0", m.dot)}
+   935→                    />
+   936→                    <div className="min-w-0 flex-1">
+   937→                      <div className="flex items-center justify-between gap-1.5">
+   938→                        <div className="text-xs font-medium truncate" title={s}>{s}</div>
+   939→                        <span className="inline-flex items-center gap-0.5 text-[9px] uppercase tracking-wide opacity-70 shrink-0">
+   940→                          {m.icon}
+   941→                          {m.label}
+   942→                        </span>
+   943→                      </div>
+   944→                      {seedDescription[s] && (
+   945→                        <div className="text-[10px] opacity-80 mt-1 line-clamp-2">{seedDescription[s]}</div>
+   946→                      )}
+   947→                    </div>
+   948→                  </div>
+   949→                );
+   950→              })}
+   951→            </div>
+   952→          </>
+   953→        )}
+   954→
+   955→        {/* Coverage summary bar */}
+   956→        <div className="mt-4 pt-3 border-t">
+   957→          <div className="flex items-center justify-between text-[11px] mb-1.5">
+   958→            <span className="text-muted-foreground">Seed coverage</span>
+   959→            <span className="font-mono font-semibold tabular-nums">
+   960→              {present.length}/{present.length + missing.length}
+   961→              <span className="text-muted-foreground ml-1">
+   962→                · {Math.round((present.length / Math.max(1, present.length + missing.length)) * 100)}%
+   963→              </span>
+   964→            </span>
+   965→          </div>
+   966→          <div className="h-2 rounded-full bg-muted overflow-hidden">
+   967→            <div
+   968→              className="h-full transition-all"
+   969→              style={{
+   970→                width: `${(present.length / Math.max(1, present.length + missing.length)) * 100}%`,
+   971→                backgroundColor: accentVar,
+   972→              }}
+   973→            />
+   974→          </div>
+   975→        </div>
+   976→      </CardContent>
+   977→    </Card>
+   978→  );
+   979→}
+   980→
+   981→/** Team Skill Radar Chart — overlays every person (up to 6) on 5 normalized
+   982→ *  axes (one per skill dimension) so you can see at a glance who covers what.
+   983→ *  Each axis is scaled 0..100 = (person's commit count in that dimension) /
+   984→ *  (max commit count across all people in that dimension) × 100. This rewards
+   985→ *  both breadth (many skills) and depth (many commits) without letting one
+   986→ *  person's huge commit count squash everyone else to 0.
+   987→ *
+   988→ *  Click a person in the legend to toggle their polygon on/off. */
+   989→function TeamRadarChart({ skillMap }: { skillMap: AdvancedSkillMap }) {
+   990→  const people = skillMap.people.slice(0, 6);
+   991→  const [hidden, setHidden] = useState<Set<string>>(new Set());
+   992→
+   993→  // Distinct color per person — uses oklch hue rotation for accessibility
+   994→  const personColors = useMemo(() => {
+   995→    const palette = [
+   996→      "oklch(0.62 0.16 35)",    // orange
+   997→      "oklch(0.62 0.14 145)",   // green
+   998→      "oklch(0.62 0.16 250)",   // blue (avoid as primary; OK for distinct viz)
+   999→      "oklch(0.62 0.16 305)",   // magenta
+  1000→      "oklch(0.65 0.13 90)",    // yellow
+  1001→      "oklch(0.60 0.13 195)",   // teal
+  1002→    ];
+  1003→    return new Map(people.map((p, i) => [p.login, palette[i % palette.length]]));
+  1004→  }, [people]);
+  1005→
+  1006→  // Compute per-person score per dimension: total commits across all skills
+  1007→  // in that dimension. Then normalize 0..100 against the max across people.
+  1008→  const { scores } = useMemo(() => {
+  1009→    const dimKeys: { key: SkillDimension; field: "sectors" | "problemTypes" | "tech" | "methodologies" | "roles" }[] = [
+  1010→      { key: "sector", field: "sectors" },
+  1011→      { key: "problemType", field: "problemTypes" },
+  1012→      { key: "tech", field: "tech" },
+  1013→      { key: "methodology", field: "methodologies" },
+  1014→      { key: "role", field: "roles" },
+  1015→    ];
+  1016→    const rawByDim: Record<SkillDimension, number[]> = {
+  1017→      sector: [],
+  1018→      problemType: [],
+  1019→      tech: [],
+  1020→      methodology: [],
+  1021→      role: [],
+  1022→    };
+  1023→    for (const p of people) {
+  1024→      for (const { key, field } of dimKeys) {
+  1025→        const sum = p[field].reduce((acc, s) => acc + s.commits, 0);
+  1026→        rawByDim[key].push(sum);
+  1027→      }
+  1028→    }
+  1029→    const maxByDim: Record<SkillDimension, number> = {
+  1030→      sector: Math.max(1, ...rawByDim.sector),
+  1031→      problemType: Math.max(1, ...rawByDim.problemType),
+  1032→      tech: Math.max(1, ...rawByDim.tech),
+  1033→      methodology: Math.max(1, ...rawByDim.methodology),
+  1034→      role: Math.max(1, ...rawByDim.role),
+  1035→    };
+  1036→    const scores = people.map((p, personIdx) => {
+  1037→      const byDim: Record<SkillDimension, number> = {
+  1038→        sector: 0, problemType: 0, tech: 0, methodology: 0, role: 0,
+  1039→      };
+  1040→      dimKeys.forEach(({ key }) => {
+  1041→        byDim[key] = Math.round((rawByDim[key][personIdx] / maxByDim[key]) * 100);
+  1042→      });
+  1043→      return byDim;
+  1044→    });
+  1045→    return { scores };
+  1046→  }, [people]);
+  1047→
+  1048→  if (people.length < 2) return null;
+  1049→
+  1050→  // SVG geometry
+  1051→  const size = 320;
+  1052→  const cx = size / 2;
+  1053→  const cy = size / 2;
+  1054→  const r = 110; // max radius
+  1055→  const dims: { key: SkillDimension; label: string; color: string }[] = [
+  1056→    { key: "sector", label: "Sectors", color: "var(--sector)" },
+  1057→    { key: "problemType", label: "Problem Types", color: "var(--problem)" },
+  1058→    { key: "tech", label: "Tech", color: "var(--tech)" },
+  1059→    { key: "methodology", label: "Methodology", color: "var(--methodology)" },
+  1060→    { key: "role", label: "Roles", color: "var(--role)" },
+  1061→  ];
+  1062→  const n = dims.length;
+  1063→  const angleFor = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2; // start at top
+  1064→  const pointFor = (i: number, ratio: number) => ({
+  1065→    x: cx + Math.cos(angleFor(i)) * r * ratio,
+  1066→    y: cy + Math.sin(angleFor(i)) * r * ratio,
+  1067→  });
+  1068→
+  1069→  // Build polygon points for a person
+  1070→  const polygonFor = (personScores: Record<SkillDimension, number>) => {
+  1071→    return dims.map((d, i) => {
+  1072→      const ratio = Math.max(0, Math.min(1, personScores[d.key] / 100));
+  1073→      const p = pointFor(i, ratio);
+  1074→      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  1075→    }).join(" ");
+  1076→  };
+  1077→
+  1078→  return (
+  1079→    <Card>
+  1080→      <CardHeader className="pb-3">
+  1081→        <div className="flex items-start justify-between gap-3">
+  1082→          <div>
+  1083→            <CardTitle className="flex items-center gap-2 text-base">
+  1084→              <Radar className="h-4 w-4 text-primary" />
+  1085→              Team Skill Radar
+  1086→            </CardTitle>
+  1087→            <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
+  1088→              <TrendingUp className="h-3 w-3" />
+  1089→              Per-person coverage across 5 dimensions (0–100 = % of team max) · toggle a person to isolate
+  1090→            </CardDescription>
+  1091→          </div>
+  1092→        </div>
+  1093→      </CardHeader>
+  1094→      <CardContent>
+  1095→        <div className="flex flex-col lg:flex-row items-center gap-6">
+  1096→          {/* SVG radar */}
+  1097→          <div className="relative shrink-0">
+  1098→            <svg
+  1099→              width={size}
+  1100→              height={size}
+  1101→              viewBox={`0 0 ${size} ${size}`}
+  1102→              className="max-w-full"
+  1103→              role="img"
+  1104→              aria-label="Team skill radar chart"
+  1105→            >
+  1106→              {/* Concentric grid pentagons at 25/50/75/100% */}
+  1107→              {[0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+  1108→                const pts = dims.map((_, i) => {
+  1109→                  const p = pointFor(i, ratio);
+  1110→                  return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  1111→                }).join(" ");
+  1112→                return (
+  1113→                  <polygon
+  1114→                    key={idx}
+  1115→                    points={pts}
+  1116→                    fill="none"
+  1117→                    stroke="var(--border)"
+  1118→                    strokeWidth={1}
+  1119→                    strokeDasharray={ratio === 1 ? "0" : "2 3"}
+  1120→                    opacity={0.7}
+  1121→                  />
+  1122→                );
+  1123→              })}
+  1124→
+  1125→              {/* Axis lines + labels */}
+  1126→              {dims.map((d, i) => {
+  1127→                const p = pointFor(i, 1);
+  1128→                const labelOffset = 18;
+  1129→                const lp = pointFor(i, (r + labelOffset) / r);
+  1130→                return (
+  1131→                  <g key={d.key}>
+  1132→                    <line
+  1133→                      x1={cx}
+  1134→                      y1={cy}
+  1135→                      x2={p.x}
+  1136→                      y2={p.y}
+  1137→                      stroke="var(--border)"
+  1138→                      strokeWidth={1}
+  1139→                      opacity={0.6}
+  1140→                    />
+  1141→                    <text
+  1142→                      x={lp.x}
+  1143→                      y={lp.y}
+  1144→                      textAnchor="middle"
+  1145→                      dominantBaseline="middle"
+  1146→                      className="fill-current text-[10px] font-semibold"
+  1147→                      style={{ fill: d.color }}
+  1148→                    >
+  1149→                      {d.label}
+  1150→                    </text>
+  1151→                  </g>
+  1152→                );
+  1153→              })}
+  1154→
+  1155→              {/* Per-person polygons */}
+  1156→              {people.map((p, idx) => {
+  1157→                if (hidden.has(p.login)) return null;
+  1158→                const color = personColors.get(p.login)!;
+  1159→                const points = polygonFor(scores[idx]);
+  1160→                return (
+  1161→                  <g key={p.login}>
+  1162→                    <polygon
+  1163→                      points={points}
+  1164→                      fill={color}
+  1165→                      fillOpacity={0.12}
+  1166→                      stroke={color}
+  1167→                      strokeWidth={1.8}
+  1168→                      strokeLinejoin="round"
+  1169→                    />
+  1170→                    {/* Vertex dots */}
+  1171→                    {dims.map((d, i) => {
+  1172→                      const ratio = Math.max(0, Math.min(1, scores[idx][d.key] / 100));
+  1173→                      const pt = pointFor(i, ratio);
+  1174→                      return (
+  1175→                        <circle
+  1176→                          key={d.key}
+  1177→                          cx={pt.x}
+  1178→                          cy={pt.y}
+  1179→                          r={2.5}
+  1180→                          fill={color}
+  1181→                          stroke="var(--background)"
+  1182→                          strokeWidth={1}
+  1183→                        />
+  1184→                      );
+  1185→                    })}
+  1186→                  </g>
+  1187→                );
+  1188→              })}
+  1189→
+  1190→              {/* Center dot */}
+  1191→              <circle cx={cx} cy={cy} r={1.5} fill="var(--muted-foreground)" opacity={0.5} />
+  1192→            </svg>
+  1193→          </div>
+  1194→
+  1195→          {/* Legend + per-person scores */}
+  1196→          <div className="flex-1 w-full space-y-2 max-h-[320px] overflow-y-auto pr-1">
+  1197→            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+  1198→              People ({people.length})
+  1199→            </div>
+  1200→            {people.map((p, idx) => {
+  1201→              const isHidden = hidden.has(p.login);
+  1202→              const color = personColors.get(p.login)!;
+  1203→              return (
+  1204→                <button
+  1205→                  key={p.login}
+  1206→                  type="button"
+  1207→                  onClick={() => {
+  1208→                    setHidden((prev) => {
+  1209→                      const next = new Set(prev);
+  1210→                      if (next.has(p.login)) next.delete(p.login);
+  1211→                      else next.add(p.login);
+  1212→                      return next;
+  1213→                    });
+  1214→                  }}
+  1215→                  className={cn(
+  1216→                    "w-full flex items-center gap-2 p-2 rounded-md border transition-all text-left",
+  1217→                    isHidden ? "opacity-40 border-border/50 bg-transparent" : "border-border/30 bg-muted/30 hover:bg-muted/60"
+  1218→                  )}
+  1219→                >
+  1220→                  <span
+  1221→                    className="h-3 w-3 rounded-full shrink-0 ring-2 ring-background"
+  1222→                    style={{ backgroundColor: color }}
+  1223→                  />
+  1224→                  <Avatar className="h-5 w-5 shrink-0">
+  1225→                    <AvatarImage src={p.avatarUrl} />
+  1226→                    <AvatarFallback className="text-[8px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+  1227→                  </Avatar>
+  1228→                  <div className="flex-1 min-w-0">
+  1229→                    <div className="text-xs font-medium truncate">{p.name || p.login}</div>
+  1230→                    <div className="text-[10px] text-muted-foreground font-mono tabular-nums">
+  1231→                      S{scores[idx].sector} · P{scores[idx].problemType} · T{scores[idx].tech} · M{scores[idx].methodology} · R{scores[idx].role}
+  1232→                    </div>
+  1233→                  </div>
+  1234→                  {isHidden && (
+  1235→                    <span className="text-[9px] text-muted-foreground italic">hidden</span>
+  1236→                  )}
+  1237→                </button>
+  1238→              );
+  1239→            })}
+  1240→            <div className="pt-2 mt-2 border-t text-[10px] text-muted-foreground/70">
+  1241→              Click a person to toggle their polygon. 0–100 = % of team max commits in that dimension.
+  1242→            </div>
+  1243→          </div>
+  1244→        </div>
+  1245→      </CardContent>
+  1246→    </Card>
+  1247→  );
+  1248→}
+  1249→

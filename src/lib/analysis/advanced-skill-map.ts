@@ -16,6 +16,7 @@ import type {
   PersonSkillRecord,
   SkillDimension,
   SkillTag,
+  ActivityPoint,
 } from "@/lib/analysis/skill-taxonomy";
 
 type DimensionAgg = Map<string, { score: number; commits: number; chunks: number }>;
@@ -267,6 +268,21 @@ function rankDim(agg: DimensionAgg): { name: string; score: number; commits: num
   return items.slice(0, 30);
 }
 
+/** Convert a list of ISO date strings (possibly with time component) into a
+ *  sorted list of { date: YYYY-MM-DD, count } daily activity points. */
+function aggregateActivity(dates: string[]): ActivityPoint[] {
+  const counts = new Map<string, number>();
+  for (const iso of dates) {
+    if (!iso) continue;
+    const dateStr = iso.slice(0, 10); // YYYY-MM-DD
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+    counts.set(dateStr, (counts.get(dateStr) ?? 0) + 1);
+  }
+  return Array.from(counts.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export type AggregationInput = {
   org: string;
   model: string;
@@ -321,6 +337,7 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
 
     const repos = new Set<string>();
     const allTags: (SkillTag & { repo: string; commits: number })[] = [];
+    const personDates: string[] = [];
     let totalCommits = 0;
     let totalChunks = 0;
 
@@ -328,6 +345,9 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
       repos.add(ext.repo);
       totalChunks += 1;
       totalCommits += ext.commits;
+      if (ext.dates && ext.dates.length > 0) {
+        personDates.push(...ext.dates);
+      }
       for (const tag of ext.tags) {
         const target =
           tag.dimension === "sector" ? sectors :
@@ -356,6 +376,10 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
     }
     ownership.sort((a, b) => b.share - a.share);
 
+    const activity = aggregateActivity(personDates);
+    const firstCommitDate = activity.length > 0 ? activity[0].date : null;
+    const lastCommitDate = activity.length > 0 ? activity[activity.length - 1].date : null;
+
     people.push({
       login: meta.login,
       name: meta.name,
@@ -371,6 +395,9 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
       roles: rankDim(roles),
       allTags: allTags.sort((a, b) => b.commits - a.commits).slice(0, 60),
       ownership: ownership.slice(0, 20),
+      activity,
+      firstCommitDate,
+      lastCommitDate,
     });
   }
 
@@ -412,6 +439,22 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
       people: countPeople(dim, d.name),
     }));
 
+  // Org-wide activity (union of all person activity)
+  const orgDateCounts = new Map<string, number>();
+  for (const ext of normalizedExtractions) {
+    if (!ext.dates) continue;
+    for (const iso of ext.dates) {
+      const dateStr = iso.slice(0, 10);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) continue;
+      orgDateCounts.set(dateStr, (orgDateCounts.get(dateStr) ?? 0) + 1);
+    }
+  }
+  const orgActivity = Array.from(orgDateCounts.entries())
+    .map(([date, count]) => ({ date, count }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const orgFirst = orgActivity.length > 0 ? orgActivity[0].date : null;
+  const orgLast = orgActivity.length > 0 ? orgActivity[orgActivity.length - 1].date : null;
+
   return {
     org: input.org,
     generatedAt: new Date().toISOString(),
@@ -427,6 +470,9 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
     orgTech: orgRollup(orgTech, "tech"),
     orgMethodologies: orgRollup(orgMethodologies, "methodology"),
     orgRoles: orgRollup(orgRoles, "role"),
+    activity: orgActivity,
+    firstCommitDate: orgFirst,
+    lastCommitDate: orgLast,
   };
 }
 
@@ -500,11 +546,20 @@ export function postNormalizeSkillMap(map: AdvancedSkillMap): AdvancedSkillMap {
 
   return {
     ...map,
-    people: newPeople,
+    people: newPeople.map((p) => ({
+      ...p,
+      activity: p.activity ?? [],
+      firstCommitDate: p.firstCommitDate ?? null,
+      lastCommitDate: p.lastCommitDate ?? null,
+    })),
     orgSectors: newOrg.orgSectors,
     orgProblemTypes: newOrg.orgProblemTypes,
     orgTech: newOrg.orgTech,
     orgMethodologies: newOrg.orgMethodologies,
     orgRoles: newOrg.orgRoles,
+    // Preserve activity & date range for old cached scans that already had them
+    activity: map.activity ?? [],
+    firstCommitDate: map.firstCommitDate ?? null,
+    lastCommitDate: map.lastCommitDate ?? null,
   };
 }

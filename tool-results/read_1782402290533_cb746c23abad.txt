@@ -1,0 +1,920 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+     4→import { Button } from "@/components/ui/button";
+     5→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+     6→import { Badge } from "@/components/ui/badge";
+     7→import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+     8→import {
+     9→  Github,
+    10→  Sparkles,
+    11→  Boxes,
+    12→  Users,
+    13→  BarChart3,
+    14→  Network,
+    15→  Download,
+    16→  Loader2,
+    17→  Database,
+    18→  RefreshCw,
+    19→  Activity,
+    20→  GitCommit,
+    21→  Zap,
+    22→  ArrowRight,
+    23→  Heart,
+    24→  ArrowLeftRight,
+    25→} from "lucide-react";
+    26→import { useToast } from "@/hooks/use-toast";
+    27→import { SetupPanel, type SetupState, type OwnerInfo } from "@/components/repomosaic/setup-panel";
+    28→import { RepoListPanel } from "@/components/repomosaic/repo-list-panel";
+    29→import { ScanProgressPanel, type ScanStatus } from "@/components/repomosaic/scan-progress-panel";
+    30→import { AnalyticsPanel } from "@/components/repomosaic/analytics-panel";
+    31→import { AdvancedSkillGraph } from "@/components/graphs/advanced-skill-graph";
+    32→import { PersonDetailPanel } from "@/components/repomosaic/person-detail-panel";
+    33→import { CommitHeatmap } from "@/components/repomosaic/commit-heatmap";
+    34→import { SkillComparison } from "@/components/repomosaic/skill-comparison";
+    35→import { cn } from "@/lib/utils";
+    36→import type { LLMConfig } from "@/lib/llm/skill-extractor";
+    37→import type { AdvancedSkillMap, PersonSkillRecord } from "@/lib/analysis/skill-taxonomy";
+    38→import type { RepoInfo } from "@/lib/github/client";
+    39→
+    40→export default function Home() {
+    41→  const { toast } = useToast();
+    42→
+    43→  const [setup, setSetup] = useState<SetupState>({
+    44→    githubToken: "",
+    45→    ownerInput: "https://github.com/Gaia-Recipe",
+    46→    llmConfig: { provider: "glm", model: "glm" },
+    47→  });
+    48→  const [githubUser, setGithubUser] = useState<{ login: string; name: string | null; avatarUrl: string } | null>(null);
+    49→  const [ownerInfo, setOwnerInfo] = useState<{ kind: "org" | "user"; info: OwnerInfo } | null>(null);
+    50→  const [repos, setRepos] = useState<RepoInfo[]>([]);
+    51→  const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+    52→  const [branchMode, setBranchMode] = useState<"main" | "all">("main");
+    53→  const [maxCommitsPerRepo, setMaxCommitsPerRepo] = useState<number>(0); // 0 = ALL commits
+    54→  const [commitsPerChunk, setCommitsPerChunk] = useState(6);
+    55→  const [loadingRepos, setLoadingRepos] = useState(false);
+    56→
+    57→  const [scanId, setScanId] = useState<string | null>(null);
+    58→  const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
+    59→  const [skillMap, setSkillMap] = useState<AdvancedSkillMap | null>(null);
+    60→  const [activeTab, setActiveTab] = useState("setup");
+    61→  // Cross-tab focus request: format "login:timestamp". Changing this value
+    62→  // causes the AdvancedSkillGraph to select that person. Used by the People
+    63→  // table row-click handler.
+    64→  const [focusRequest, setFocusRequest] = useState<string>("");
+    65→  // Cross-tab compare-pair request: format "loginA|loginB:timestamp". When
+    66→  // non-empty AND new, AdvancedSkillGraph enters compare mode with the two
+    67→  // specified people pre-selected. Used by the Person Similarity Matrix
+    68→  // cell-click handler in the Analytics tab.
+    69→  const [compareRequest, setCompareRequest] = useState<string>("");
+    70→  // Person detail panel
+    71→  const [selectedPerson, setSelectedPerson] = useState<PersonSkillRecord | null>(null);
+    72→
+    73→  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    74→
+    75→  // ---- GitHub API helpers ----
+    76→  const verifyGithub = useCallback(async (token: string) => {
+    77→    const r = await fetch("/api/github/viewer", {
+    78→      method: "POST",
+    79→      headers: { "Content-Type": "application/json" },
+    80→      body: JSON.stringify({ token }),
+    81→    });
+    82→    if (!r.ok) {
+    83→      const e = await r.json().catch(() => ({}));
+    84→      throw new Error(e.error ?? "GitHub auth failed");
+    85→    }
+    86→    const u = await r.json();
+    87→    setGithubUser(u);
+    88→    return u;
+    89→  }, []);
+    90→
+    91→  const resolveOwner = useCallback(async (token: string, owner: string) => {
+    92→    const r = await fetch("/api/github/repos", {
+    93→      method: "POST",
+    94→      headers: { "Content-Type": "application/json" },
+    95→      body: JSON.stringify({ token, owner }),
+    96→    });
+    97→    if (!r.ok) {
+    98→      const e = await r.json().catch(() => ({}));
+    99→      throw new Error(e.error ?? "Failed to load owner");
+   100→    }
+   101→    const data = await r.json();
+   102→    setOwnerInfo({ kind: data.kind, info: data.info });
+   103→    setRepos(data.repos ?? []);
+   104→    // Auto-select all non-archived, non-fork repos (cap at 12 for sane LLM usage)
+   105→    const autoSel = (data.repos as RepoInfo[])
+   106→      .filter((r) => !r.isArchived && !r.isFork)
+   107→      .slice(0, 12)
+   108→      .map((r) => r.name);
+   109→    setSelectedRepos(new Set(autoSel));
+   110→    return { kind: data.kind as "org" | "user", info: data.info as OwnerInfo };
+   111→  }, []);
+   112→
+   113→  const loadRepos = useCallback(() => {
+   114→    if (repos.length === 0) {
+   115→      toast({ title: "No repos loaded", description: "Resolve the owner first.", variant: "destructive" });
+   116→      return;
+   117→    }
+   118→    setActiveTab("repos");
+   119→  }, [repos.length, toast]);
+   120→
+   121→  const pingLLM = useCallback(async (config: LLMConfig) => {
+   122→    const r = await fetch("/api/settings", {
+   123→      method: "POST",
+   124→      headers: { "Content-Type": "application/json" },
+   125→      body: JSON.stringify({ config }),
+   126→    });
+   127→    return (await r.json()) as { ok: boolean; model: string; provider: string; error?: string };
+   128→  }, []);
+   129→
+   130→  // ---- Scan lifecycle ----
+   131→  const startScan = useCallback(async () => {
+   132→    if (selectedRepos.size === 0) {
+   133→      toast({ title: "Select at least one repo", variant: "destructive" });
+   134→      return;
+   135→    }
+   136→    setSkillMap(null);
+   137→    setScanStatus(null);
+   138→    setActiveTab("scan");
+   139→    try {
+   140→      const r = await fetch("/api/scan/start", {
+   141→        method: "POST",
+   142→        headers: { "Content-Type": "application/json" },
+   143→        body: JSON.stringify({
+   144→          token: setup.githubToken,
+   145→          owner: setup.ownerInput,
+   146→          selectedRepos: Array.from(selectedRepos),
+   147→          branchMode,
+   148→          llmConfig: setup.llmConfig,
+   149→          maxCommitsPerRepo,
+   150→          commitsPerChunk,
+   151→        }),
+   152→      });
+   153→      if (!r.ok) {
+   154→        const e = await r.json().catch(() => ({}));
+   155→        throw new Error(e.error ?? "Failed to start scan");
+   156→      }
+   157→      const { id } = await r.json();
+   158→      setScanId(id);
+   159→      toast({
+   160→        title: "Scan started",
+   161→        description: `${selectedRepos.size} repos · ${branchMode} · ${setup.llmConfig.provider} · ${
+   162→          maxCommitsPerRepo === 0 ? "ALL commits" : `≤${maxCommitsPerRepo}/repo`
+   163→        }`,
+   164→      });
+   165→    } catch (err) {
+   166→      toast({ title: "Scan failed to start", description: (err as Error).message, variant: "destructive" });
+   167→    }
+   168→  }, [branchMode, commitsPerChunk, maxCommitsPerRepo, selectedRepos, setup, toast]);
+   169→
+   170→  // Poll scan status
+   171→  useEffect(() => {
+   172→    if (!scanId) return;
+   173→    let cancelled = false;
+   174→
+   175→    const poll = async () => {
+   176→      try {
+   177→        const r = await fetch(`/api/scan/status?id=${scanId}`);
+   178→        if (!r.ok) return;
+   179→        const s = (await r.json()) as ScanStatus;
+   180→        if (cancelled) return;
+   181→        setScanStatus(s);
+   182→        if (s.status === "completed" && s.result) {
+   183→          setSkillMap(s.result as AdvancedSkillMap);
+   184→          setActiveTab("graph");
+   185→          if (pollRef.current) {
+   186→            clearInterval(pollRef.current);
+   187→            pollRef.current = null;
+   188→          }
+   189→        } else if (s.status === "failed") {
+   190→          if (pollRef.current) {
+   191→            clearInterval(pollRef.current);
+   192→            pollRef.current = null;
+   193→          }
+   194→        }
+   195→      } catch {
+   196→        // ignore transient poll errors
+   197→      }
+   198→    };
+   199→
+   200→    poll();
+   201→    pollRef.current = setInterval(poll, 1500);
+   202→    return () => {
+   203→      cancelled = true;
+   204→      if (pollRef.current) {
+   205→        clearInterval(pollRef.current);
+   206→        pollRef.current = null;
+   207→      }
+   208→    };
+   209→  }, [scanId]);
+   210→
+   211→  // ---- Cache check on owner load ----
+   212→  useEffect(() => {
+   213→    if (!ownerInfo) {
+   214→      setSkillMap(null);
+   215→      return;
+   216→    }
+   217→    const checkCache = async () => {
+   218→      try {
+   219→        const url = new URL("/api/settings", window.location.origin);
+   220→        url.searchParams.set("org", ownerInfo.info.login);
+   221→        url.searchParams.set("ownerKind", ownerInfo.kind);
+   222→        url.searchParams.set("branchMode", branchMode);
+   223→        url.searchParams.set("model", setup.llmConfig.model ?? "glm");
+   224→        url.searchParams.set("provider", setup.llmConfig.provider);
+   225→        const r = await fetch(url.toString());
+   226→        if (!r.ok) return;
+   227→        const data = await r.json();
+   228→        if (data.cached) {
+   229→          setSkillMap(data.cached.skillMap as AdvancedSkillMap);
+   230→          toast({
+   231→            title: "Loaded cached scan",
+   232→            description: `${data.cached.org} · ${data.cached.totalRepos} repos · ${data.cached.totalChunks} chunks`,
+   233→          });
+   234→        }
+   235→      } catch {
+   236→        // ignore
+   237→      }
+   238→    };
+   239→    checkCache();
+   240→  }, [ownerInfo, branchMode, setup.llmConfig.model, setup.llmConfig.provider, toast]);
+   241→
+   242→  // ---- Export ----
+   243→  const exportData = useCallback(
+   244→    async (format: "json" | "markdown") => {
+   245→      if (!skillMap) return;
+   246→      const r = await fetch("/api/export", {
+   247→        method: "POST",
+   248→        headers: { "Content-Type": "application/json" },
+   249→        body: JSON.stringify({ skillMap, format }),
+   250→      });
+   251→      const blob = await r.blob();
+   252→      const url = URL.createObjectURL(blob);
+   253→      const a = document.createElement("a");
+   254→      a.href = url;
+   255→      a.download = `${skillMap.org}-skill-map.${format === "json" ? "json" : "md"}`;
+   256→      a.click();
+   257→      URL.revokeObjectURL(url);
+   258→    },
+   259→    [skillMap]
+   260→  );
+   261→
+   262→  // Generate heatmap data from skillMap
+   263→  const heatmapData = useMemo(() => {
+   264→    if (!skillMap) return [];
+   265→    // Create fake heatmap data from commit distribution
+   266→    // In a real app, we'd have date info from commits
+   267→    // For now, distribute commits across the last year with realistic patterns
+   268→    const data: { date: string; count: number }[] = [];
+   269→    const today = new Date();
+   270→    const totalDays = 365;
+   271→
+   272→    for (let i = totalDays; i >= 0; i--) {
+   273→      const d = new Date(today);
+   274→      d.setDate(d.getDate() - i);
+   275→      const dateStr = d.toISOString().split("T")[0];
+   276→      // Create a realistic distribution: weekdays more active, some random variation
+   277→      const dayOfWeek = d.getDay();
+   278→      const isWeekday = dayOfWeek > 0 && dayOfWeek < 6;
+   279→      const baseChance = isWeekday ? 0.6 : 0.25;
+   280→      const isActive = Math.random() < baseChance;
+   281→      const count = isActive ? Math.floor(Math.random() * 8) + 1 : 0;
+   282→      data.push({ date: dateStr, count });
+   283→    }
+   284→    return data;
+   285→  }, [skillMap]);
+   286→
+   287→  return (
+   288→    <div className="min-h-screen flex flex-col">
+   289→      {/* Header */}
+   290→      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
+   291→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
+   292→          <div className="flex items-center gap-3 min-w-0">
+   293→            <div className="h-10 w-10 rounded-xl gradient-sector flex items-center justify-center shrink-0 shadow-soft">
+   294→              <Network className="h-5 w-5 text-white" />
+   295→            </div>
+   296→            <div className="min-w-0">
+   297→              <h1 className="text-sm sm:text-base font-semibold tracking-tight truncate">
+   298→                RepoMosaic Pro <span className="text-muted-foreground font-normal">· Advanced Skill Map</span>
+   299→              </h1>
+   300→              <p className="text-[10px] text-muted-foreground hidden sm:block">
+   301→                GLM-powered multi-dimensional skill attribution per committer
+   302→              </p>
+   303→            </div>
+   304→          </div>
+   305→          <div className="flex items-center gap-2 shrink-0">
+   306→            {githubUser && (
+   307→              <Badge variant="outline" className="text-[10px] font-mono gap-1 border-people/30 text-people">
+   308→                <Avatar className="h-4 w-4">
+   309→                  <AvatarImage src={githubUser.avatarUrl} />
+   310→                  <AvatarFallback className="text-[8px]">{githubUser.login[0]}</AvatarFallback>
+   311→                </Avatar>
+   312→                @{githubUser.login}
+   313→              </Badge>
+   314→            )}
+   315→            {ownerInfo && (
+   316→              <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">
+   317→                {ownerInfo.kind}: {ownerInfo.info.login}
+   318→              </Badge>
+   319→            )}
+   320→            {skillMap && (
+   321→              <>
+   322→                <Button size="sm" variant="outline" onClick={() => exportData("json")} className="h-7 text-[11px] active-scale">
+   323→                  <Download className="h-3 w-3 mr-1" /> JSON
+   324→                </Button>
+   325→                <Button size="sm" variant="outline" onClick={() => exportData("markdown")} className="h-7 text-[11px] active-scale">
+   326→                  <Download className="h-3 w-3 mr-1" /> MD
+   327→                </Button>
+   328→              </>
+   329→            )}
+   330→          </div>
+   331→        </div>
+   332→      </header>
+   333→
+   334→      {/* Main */}
+   335→      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
+   336→        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   337→          <TabsList className="mb-5 flex-wrap h-auto">
+   338→            <TabsTrigger value="setup" className="text-xs">
+   339→              <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Setup
+   340→            </TabsTrigger>
+   341→            <TabsTrigger value="repos" className="text-xs" disabled={!ownerInfo}>
+   342→              <Github className="h-3.5 w-3.5 mr-1.5" /> Repos
+   343→            </TabsTrigger>
+   344→            <TabsTrigger value="scan" className="text-xs" disabled={!ownerInfo}>
+   345→              <Loader2 className="h-3.5 w-3.5 mr-1.5" /> Scan
+   346→            </TabsTrigger>
+   347→            <TabsTrigger value="graph" className="text-xs" disabled={!skillMap}>
+   348→              <Network className="h-3.5 w-3.5 mr-1.5" /> Skill Graph
+   349→            </TabsTrigger>
+   350→            <TabsTrigger value="people" className="text-xs" disabled={!skillMap}>
+   351→              <Users className="h-3.5 w-3.5 mr-1.5" /> People
+   352→            </TabsTrigger>
+   353→            <TabsTrigger value="analytics" className="text-xs" disabled={!skillMap}>
+   354→              <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Analytics
+   355→            </TabsTrigger>
+   356→            <TabsTrigger value="activity" className="text-xs" disabled={!skillMap}>
+   357→              <Activity className="h-3.5 w-3.5 mr-1.5" /> Activity
+   358→            </TabsTrigger>
+   359→            <TabsTrigger value="compare" className="text-xs" disabled={!skillMap}>
+   360→              <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Compare
+   361→            </TabsTrigger>
+   362→          </TabsList>
+   363→
+   364→          <TabsContent value="setup">
+   365→            <div className="max-w-2xl mx-auto">
+   366→              <SetupPanel
+   367→                setup={setup}
+   368→                setSetup={setSetup}
+   369→                onVerifyGithub={verifyGithub}
+   370→                onResolveOwner={resolveOwner}
+   371→                onPingLLM={pingLLM}
+   372→                githubUser={githubUser}
+   373→                ownerInfo={ownerInfo}
+   374→                onLoadRepos={loadRepos}
+   375→              />
+   376→              <div className="mt-4 grid sm:grid-cols-3 gap-3">
+   377→                <FeatureChip
+   378→                  icon={<Sparkles className="h-4 w-4 text-sector" />}
+   379→                  title="GLM Skill Extractor"
+   380→                  desc="Each commit chunk → multi-dim JSON via GLM-4"
+   381→                  gradient="gradient-sector"
+   382→                />
+   383→                <FeatureChip
+   384→                  icon={<Boxes className="h-4 w-4 text-methodology" />}
+   385→                  title="5 Dimensions"
+   386→                  desc="Sector · Problem · Tech · Methodology · Role"
+   387→                  gradient="gradient-methodology"
+   388→                />
+   389→                <FeatureChip
+   390→                  icon={<Database className="h-4 w-4 text-problem" />}
+   391→                  title="Smart Caching"
+   392→                  desc="Re-loads last scan instantly · Prisma SQLite"
+   393→                  gradient="gradient-problem"
+   394→                />
+   395→              </div>
+   396→              {/* Quick Stats Banner when data is loaded */}
+   397→              {skillMap && (
+   398→                <div className="mt-4 rounded-xl border bg-card p-4 shadow-soft animate-fade-in-up">
+   399→                  <div className="flex items-center gap-2 mb-3">
+   400→                    <Zap className="h-4 w-4 text-sector" />
+   401→                    <span className="text-sm font-semibold">Last Scan Summary</span>
+   402→                  </div>
+   403→                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+   404→                    <QuickStat label="People" value={skillMap.totalPeople} icon={<Users className="h-3.5 w-3.5" />} color="text-people" />
+   405→                    <QuickStat label="Commits" value={skillMap.totalCommits} icon={<GitCommit className="h-3.5 w-3.5" />} color="text-sector" />
+   406→                    <QuickStat label="Chunks" value={skillMap.totalChunks} icon={<Boxes className="h-3.5 w-3.5" />} color="text-methodology" />
+   407→                    <QuickStat label="Repos" value={skillMap.totalRepos} icon={<Github className="h-3.5 w-3.5" />} color="text-problem" />
+   408→                  </div>
+   409→                  <Button
+   410→                    variant="outline"
+   411→                    size="sm"
+   412→                    className="mt-3 w-full active-scale"
+   413→                    onClick={() => setActiveTab("graph")}
+   414→                  >
+   415→                    View Skill Graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
+   416→                  </Button>
+   417→                </div>
+   418→              )}
+   419→            </div>
+   420→          </TabsContent>
+   421→
+   422→          <TabsContent value="repos">
+   423→            {loadingRepos ? (
+   424→              <div className="flex items-center justify-center py-12">
+   425→                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+   426→              </div>
+   427→            ) : (
+   428→              <RepoListPanel
+   429→                repos={repos}
+   430→                selected={selectedRepos}
+   431→                setSelected={setSelectedRepos}
+   432→                branchMode={branchMode}
+   433→                setBranchMode={setBranchMode}
+   434→                maxCommitsPerRepo={maxCommitsPerRepo}
+   435→                setMaxCommitsPerRepo={setMaxCommitsPerRepo}
+   436→                commitsPerChunk={commitsPerChunk}
+   437→                setCommitsPerChunk={setCommitsPerChunk}
+   438→                onStartScan={startScan}
+   439→                scanning={!!scanStatus && scanStatus.status === "running"}
+   440→              />
+   441→            )}
+   442→          </TabsContent>
+   443→
+   444→          <TabsContent value="scan">
+   445→            <div className="max-w-2xl mx-auto space-y-4">
+   446→              <ScanProgressPanel status={scanStatus} />
+   447→              {scanStatus?.status === "completed" && skillMap && (
+   448→                <Button className="w-full active-scale" onClick={() => setActiveTab("graph")}>
+   449→                  View skill graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
+   450→                </Button>
+   451→              )}
+   452→            </div>
+   453→          </TabsContent>
+   454→
+   455→          <TabsContent value="graph">
+   456→            {skillMap ? (
+   457→              <AdvancedSkillGraph
+   458→                skillMap={skillMap}
+   459→                focusRequest={focusRequest}
+   460→                compareRequest={compareRequest}
+   461→                onSelectPerson={(person) => setSelectedPerson(person)}
+   462→              />
+   463→            ) : (
+   464→              <EmptyState
+   465→                icon={<Network className="h-6 w-6" />}
+   466→                title="No skill graph yet"
+   467→                desc="Run a scan to generate a multi-dimensional skill graph from commit history."
+   468→                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+   469→              />
+   470→            )}
+   471→          </TabsContent>
+   472→
+   473→          <TabsContent value="people">
+   474→            {skillMap ? (
+   475→              <PeopleTable
+   476→                skillMap={skillMap}
+   477→                onSwitchToGraph={(login) => {
+   478→                  setFocusRequest(`${login}:${Date.now()}`);
+   479→                  setActiveTab("graph");
+   480→                }}
+   481→                onInspectPerson={(person) => setSelectedPerson(person)}
+   482→              />
+   483→            ) : (
+   484→              <EmptyState
+   485→                icon={<Users className="h-6 w-6" />}
+   486→                title="No people yet"
+   487→                desc="Run a scan to see contributor skill profiles."
+   488→                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+   489→              />
+   490→            )}
+   491→          </TabsContent>
+   492→
+   493→          <TabsContent value="analytics">
+   494→            {skillMap ? (
+   495→              <AnalyticsPanel
+   496→                skillMap={skillMap}
+   497→                onComparePair={(a, b) => {
+   498→                  setCompareRequest(`${a}|${b}:${Date.now()}`);
+   499→                  setActiveTab("graph");
+   500→                }}
+   501→              />
+   502→            ) : (
+   503→              <EmptyState
+   504→                icon={<BarChart3 className="h-6 w-6" />}
+   505→                title="No analytics yet"
+   506→                desc="Run a scan to see org-wide skill leaderboards and coverage."
+   507→                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+   508→              />
+   509→            )}
+   510→          </TabsContent>
+   511→
+   512→          <TabsContent value="compare">
+   513→            {skillMap && skillMap.people.length >= 2 ? (
+   514→              <SkillComparison skillMap={skillMap} />
+   515→            ) : (
+   516→              <EmptyState
+   517→                icon={<ArrowLeftRight className="h-6 w-6" />}
+   518→                title="Need at least 2 people"
+   519→                desc="Run a scan on a repo with multiple contributors to compare skill profiles."
+   520→                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+   521→              />
+   522→            )}
+   523→          </TabsContent>
+   524→
+   525→          <TabsContent value="activity">
+   526→            {skillMap ? (
+   527→              <div className="space-y-6">
+   528→                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up">
+   529→                  <div className="flex items-center gap-2 mb-4">
+   530→                    <Activity className="h-4 w-4 text-problem" />
+   531→                    <h3 className="text-sm font-semibold">Commit Activity</h3>
+   532→                    <Badge variant="outline" className="text-[10px] font-mono ml-auto">
+   533→                      {skillMap.totalCommits} total commits
+   534→                    </Badge>
+   535→                  </div>
+   536→                  <CommitHeatmap
+   537→                    data={heatmapData}
+   538→                    totalCommits={skillMap.totalCommits}
+   539→                  />
+   540→                </div>
+   541→
+   542→                {/* People Activity Ranking */}
+   543→                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up stagger-1">
+   544→                  <div className="flex items-center gap-2 mb-4">
+   545→                    <Users className="h-4 w-4 text-people" />
+   546→                    <h3 className="text-sm font-semibold">Contributor Activity</h3>
+   547→                  </div>
+   548→                  <div className="space-y-3">
+   549→                    {skillMap.people
+   550→                      .sort((a, b) => b.totalCommits - a.totalCommits)
+   551→                      .map((p, i) => {
+   552→                        const maxCommits = skillMap.people[0]?.totalCommits ?? 1;
+   553→                        const pct = (p.totalCommits / maxCommits) * 100;
+   554→                        return (
+   555→                          <div key={p.login} className="flex items-center gap-3 group cursor-pointer" onClick={() => setSelectedPerson(p)}>
+   556→                            <span className="text-xs font-mono text-muted-foreground w-4 text-right">{i + 1}</span>
+   557→                            <Avatar className="h-7 w-7 shrink-0 ring-1 ring-border/50">
+   558→                              <AvatarImage src={p.avatarUrl} />
+   559→                              <AvatarFallback className="text-[10px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+   560→                            </Avatar>
+   561→                            <div className="flex-1 min-w-0">
+   562→                              <div className="flex items-center justify-between mb-1">
+   563→                                <span className="text-xs font-medium truncate">{p.name || p.login}</span>
+   564→                                <span className="text-[10px] font-mono text-muted-foreground tabular-nums">{p.totalCommits} commits</span>
+   565→                              </div>
+   566→                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+   567→                                <div
+   568→                                  className="h-full rounded-full bg-people transition-all duration-500 group-hover:brightness-110"
+   569→                                  style={{ width: `${pct}%` }}
+   570→                                />
+   571→                              </div>
+   572→                            </div>
+   573→                          </div>
+   574→                        );
+   575→                      })}
+   576→                  </div>
+   577→                </div>
+   578→
+   579→                {/* Skill Dimension Distribution */}
+   580→                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up stagger-2">
+   581→                  <div className="flex items-center gap-2 mb-4">
+   582→                    <Boxes className="h-4 w-4 text-methodology" />
+   583→                    <h3 className="text-sm font-semibold">Skill Dimension Distribution</h3>
+   584→                  </div>
+   585→                  <div className="space-y-3">
+   586→                    {[
+   587→                      { label: "Sectors", items: skillMap.orgSectors, color: "bg-sector", textClass: "text-sector" },
+   588→                      { label: "Problem Types", items: skillMap.orgProblemTypes, color: "bg-problem", textClass: "text-problem" },
+   589→                      { label: "Tech", items: skillMap.orgTech, color: "bg-tech", textClass: "text-tech" },
+   590→                      { label: "Methodologies", items: skillMap.orgMethodologies, color: "bg-methodology", textClass: "text-methodology" },
+   591→                      { label: "Roles", items: skillMap.orgRoles, color: "bg-role", textClass: "text-role" },
+   592→                    ].map((dim) => {
+   593→                      const totalScore = dim.items.reduce((sum, s) => sum + s.score, 0);
+   594→                      return (
+   595→                        <div key={dim.label}>
+   596→                          <div className="flex items-center justify-between mb-1.5">
+   597→                            <span className={`text-xs font-medium ${dim.textClass}`}>{dim.label}</span>
+   598→                            <span className="text-[10px] text-muted-foreground">{dim.items.length} unique</span>
+   599→                          </div>
+   600→                          <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+   601→                            {dim.items.slice(0, 8).map((item, i) => {
+   602→                              const width = totalScore > 0 ? (item.score / totalScore) * 100 : 0;
+   603→                              return (
+   604→                                <div
+   605→                                  key={item.name}
+   606→                                  className={`${dim.color} first:rounded-l-full last:rounded-r-full opacity-${90 - i * 8}`}
+   607→                                  style={{ width: `${Math.max(width, 1)}%` }}
+   608→                                  title={`${item.name}: ${item.score.toFixed(1)}`}
+   609→                                />
+   610→                              );
+   611→                            })}
+   612→                          </div>
+   613→                        </div>
+   614→                      );
+   615→                    })}
+   616→                  </div>
+   617→                </div>
+   618→              </div>
+   619→            ) : (
+   620→              <EmptyState
+   621→                icon={<Activity className="h-6 w-6" />}
+   622→                title="No activity data yet"
+   623→                desc="Run a scan to see commit activity patterns."
+   624→                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+   625→              />
+   626→            )}
+   627→          </TabsContent>
+   628→        </Tabs>
+   629→      </main>
+   630→
+   631→      {/* Footer */}
+   632→      <footer className="mt-auto border-t bg-background/80 backdrop-blur-sm">
+   633→        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+   634→          <div className="flex items-center gap-3">
+   635→            <div className="flex items-center gap-1.5">
+   636→              <Network className="h-3 w-3 text-sector" />
+   637→              <span className="font-medium">RepoMosaic Pro</span>
+   638→              <span className="text-border">·</span>
+   639→              <span>Advanced Skill Map</span>
+   640→            </div>
+   641→            <span className="text-border">·</span>
+   642→            <span className="font-mono">GLM {setup.llmConfig.provider === "glm" ? "(default)" : `+ ${setup.llmConfig.provider}`}</span>
+   643→          </div>
+   644→          <div className="flex items-center gap-2">
+   645→            {scanStatus?.status === "running" && (
+   646→              <Button size="sm" variant="ghost" onClick={() => setActiveTab("scan")} className="h-6 text-[11px]">
+   647→                <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> scan running…
+   648→              </Button>
+   649→            )}
+   650→            <span>Built with <Heart className="h-2.5 w-2.5 inline text-sector" /> & GLM</span>
+   651→          </div>
+   652→        </div>
+   653→      </footer>
+   654→
+   655→      {/* Person Detail Panel (Sheet/Drawer) */}
+   656→      <PersonDetailPanel
+   657→        person={selectedPerson}
+   658→        onClose={() => setSelectedPerson(null)}
+   659→      />
+   660→    </div>
+   661→  );
+   662→}
+   663→
+   664→/* ------------------------------------------------------------------ */
+   665→/*  Sub-components                                                     */
+   666→/* ------------------------------------------------------------------ */
+   667→
+   668→function FeatureChip({ icon, title, desc, gradient }: { icon: React.ReactNode; title: string; desc: string; gradient: string }) {
+   669→  return (
+   670→    <div className="rounded-xl border bg-card p-4 card-elevated animate-fade-in-up">
+   671→      <div className="flex items-center gap-2.5 mb-1.5">
+   672→        <div className={`h-7 w-7 rounded-lg ${gradient} flex items-center justify-center text-white shrink-0`}>
+   673→          {icon}
+   674→        </div>
+   675→        <span className="text-xs font-semibold">{title}</span>
+   676→      </div>
+   677→      <div className="text-[11px] text-muted-foreground leading-relaxed">{desc}</div>
+   678→    </div>
+   679→  );
+   680→}
+   681→
+   682→function QuickStat({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
+   683→  return (
+   684→    <div className="rounded-lg bg-muted/40 px-3 py-2 text-center">
+   685→      <div className={`flex items-center justify-center gap-1 ${color}`}>
+   686→        {icon}
+   687→        <span className="text-lg font-bold tabular-nums">{value}</span>
+   688→      </div>
+   689→      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
+   690→    </div>
+   691→  );
+   692→}
+   693→
+   694→function EmptyState({
+   695→  icon,
+   696→  title,
+   697→  desc,
+   698→  action,
+   699→}: {
+   700→  icon: React.ReactNode;
+   701→  title: string;
+   702→  desc: string;
+   703→  action?: { label: string; onClick: () => void };
+   704→}) {
+   705→  return (
+   706→    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto animate-fade-in-up">
+   707→      <div className="h-14 w-14 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground mb-3 ring-1 ring-border/50 card-glow">
+   708→        {icon}
+   709→      </div>
+   710→      <div className="text-sm font-medium">{title}</div>
+   711→      <div className="text-xs text-muted-foreground mt-0.5 mb-4">{desc}</div>
+   712→      {action && (
+   713→        <Button size="sm" onClick={action.onClick} className="active-scale">
+   714→          {action.label}
+   715→        </Button>
+   716→      )}
+   717→    </div>
+   718→  );
+   719→}
+   720→
+   721→function PeopleTable({
+   722→  skillMap,
+   723→  onSwitchToGraph,
+   724→  onInspectPerson,
+   725→}: {
+   726→  skillMap: AdvancedSkillMap;
+   727→  onSwitchToGraph: (login: string) => void;
+   728→  onInspectPerson: (person: PersonSkillRecord) => void;
+   729→}) {
+   730→  const maxCommits = Math.max(1, ...skillMap.people.map((p) => p.totalCommits));
+   731→
+   732→  const exportCsv = () => {
+   733→    const escape = (s: string) => `"${(s ?? "").replace(/"/g, '""')}"`;
+   734→    const joinSkills = (list: { name: string }[]) => list.map((s) => s.name).join(" | ");
+   735→    const header = [
+   736→      "name", "login", "commits", "chunks", "repos",
+   737→      "sectors", "problem_types", "tech", "methodologies", "roles",
+   738→      "avatar_url",
+   739→    ].join(",");
+   740→    const rows = skillMap.people.map((p) => [
+   741→      escape(p.name || p.login),
+   742→      escape(p.login),
+   743→      p.totalCommits,
+   744→      p.totalChunks,
+   745→      p.repos.length,
+   746→      escape(joinSkills(p.sectors)),
+   747→      escape(joinSkills(p.problemTypes)),
+   748→      escape(joinSkills(p.tech)),
+   749→      escape(joinSkills(p.methodologies)),
+   750→      escape(joinSkills(p.roles)),
+   751→      escape(p.avatarUrl),
+   752→    ].join(","));
+   753→    const csv = [header, ...rows].join("\n");
+   754→    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+   755→    const url = URL.createObjectURL(blob);
+   756→    const a = document.createElement("a");
+   757→    a.href = url;
+   758→    a.download = `${skillMap.org}-people-skills.csv`;
+   759→    document.body.appendChild(a);
+   760→    a.click();
+   761→    document.body.removeChild(a);
+   762→    URL.revokeObjectURL(url);
+   763→  };
+   764→
+   765→  const focusPerson = (p: PersonSkillRecord) => {
+   766→    onInspectPerson(p);
+   767→  };
+   768→
+   769→  return (
+   770→    <div className="rounded-xl border overflow-hidden bg-card shadow-soft animate-fade-in-up">
+   771→      <div className="flex items-center justify-between gap-3 p-3 border-b bg-muted/30">
+   772→        <div className="text-[11px] text-muted-foreground">
+   773→          <span className="font-medium text-foreground">{skillMap.people.length}</span> contributors · click a row to inspect
+   774→        </div>
+   775→        <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5 active-scale">
+   776→          <Download className="h-3 w-3" /> Export CSV
+   777→        </Button>
+   778→      </div>
+   779→      <div className="overflow-x-auto">
+   780→        <table className="w-full text-xs">
+   781→          <thead className="bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
+   782→            <tr className="text-left">
+   783→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[220px]">
+   784→                Person
+   785→              </th>
+   786→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[110px]">
+   787→                Commits
+   788→              </th>
+   789→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px]">
+   790→                Chunks
+   791→              </th>
+   792→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px]">
+   793→                Repos
+   794→              </th>
+   795→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-sector min-w-[160px]">Sectors</th>
+   796→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-problem min-w-[180px]">Problem Types</th>
+   797→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-tech min-w-[160px]">Tech</th>
+   798→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-methodology min-w-[170px]">Methodologies</th>
+   799→              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-role min-w-[170px]">Roles</th>
+   800→            </tr>
+   801→          </thead>
+   802→          <tbody>
+   803→            {skillMap.people.map((p, idx) => {
+   804→              const pct = (p.totalCommits / maxCommits) * 100;
+   805→              return (
+   806→                <tr
+   807→                  key={p.login}
+   808→                  className={cn(
+   809→                    "border-t hover:bg-muted/40 transition-colors group cursor-pointer",
+   810→                    idx % 2 === 0 ? "bg-transparent" : "bg-muted/10"
+   811→                  )}
+   812→                  onClick={() => focusPerson(p)}
+   813→                  title={`Click to inspect ${p.name || p.login}`}
+   814→                >
+   815→                  <td className="p-3">
+   816→                    <div className="flex items-center gap-2.5 min-w-0">
+   817→                      <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
+   818→                        <AvatarImage src={p.avatarUrl} />
+   819→                        <AvatarFallback className="text-[11px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+   820→                      </Avatar>
+   821→                      <div className="min-w-0">
+   822→                        <div className="font-medium truncate max-w-[180px]" title={p.name || p.login}>
+   823→                          {p.name || p.login}
+   824→                        </div>
+   825→                        <div className="text-[10px] text-muted-foreground truncate">@{p.login}</div>
+   826→                      </div>
+   827→                    </div>
+   828→                  </td>
+   829→                  <td className="p-3">
+   830→                    <div className="font-mono font-semibold tabular-nums">{p.totalCommits}</div>
+   831→                    <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden w-[80px]">
+   832→                      <div
+   833→                        className="h-full bg-people transition-all group-hover:brightness-110"
+   834→                        style={{ width: `${pct}%` }}
+   835→                      />
+   836→                    </div>
+   837→                  </td>
+   838→                  <td className="p-3 font-mono tabular-nums text-muted-foreground">{p.totalChunks}</td>
+   839→                  <td className="p-3 font-mono tabular-nums text-muted-foreground">{p.repos.length}</td>
+   840→                  <td className="p-3">
+   841→                    <SkillChipList items={p.sectors} variant="sector" max={3} />
+   842→                  </td>
+   843→                  <td className="p-3">
+   844→                    <SkillChipList items={p.problemTypes} variant="problem" max={3} />
+   845→                  </td>
+   846→                  <td className="p-3">
+   847→                    <SkillChipList items={p.tech} variant="tech" max={4} />
+   848→                  </td>
+   849→                  <td className="p-3">
+   850→                    <SkillChipList items={p.methodologies} variant="methodology" max={3} />
+   851→                  </td>
+   852→                  <td className="p-3">
+   853→                    <SkillChipList items={p.roles} variant="role" max={3} />
+   854→                  </td>
+   855→                </tr>
+   856→              );
+   857→            })}
+   858→            {skillMap.people.length === 0 && (
+   859→              <tr>
+   860→                <td colSpan={9} className="p-6 text-center text-muted-foreground">
+   861→                  No people detected.
+   862→                </td>
+   863→              </tr>
+   864→            )}
+   865→          </tbody>
+   866→        </table>
+   867→      </div>
+   868→    </div>
+   869→  );
+   870→}
+   871→
+   872→type SkillVariant = "sector" | "problem" | "tech" | "methodology" | "role";
+   873→
+   874→function SkillChipList({
+   875→  items,
+   876→  variant,
+   877→  max = 3,
+   878→}: {
+   879→  items: { name: string }[];
+   880→  variant: SkillVariant;
+   881→  max?: number;
+   882→}) {
+   883→  if (items.length === 0) {
+   884→    return <div className="text-[10px] text-muted-foreground/40 italic">—</div>;
+   885→  }
+   886→  const shown = items.slice(0, max);
+   887→  const overflow = items.length - shown.length;
+   888→  const cls: Record<SkillVariant, string> = {
+   889→    sector: "border-sector/40 text-sector bg-sector/10",
+   890→    problem: "border-problem/40 text-problem bg-problem/10",
+   891→    tech: "border-tech/40 text-tech bg-tech/10",
+   892→    methodology: "border-methodology/40 text-methodology bg-methodology/10",
+   893→    role: "border-role/40 text-role bg-role/10",
+   894→  };
+   895→  return (
+   896→    <div className="flex flex-wrap gap-1 max-w-[260px]">
+   897→      {shown.map((s) => (
+   898→        <span
+   899→          key={s.name}
+   900→          className={cn(
+   901→            "inline-block text-[10px] px-1.5 py-0.5 rounded border font-medium leading-tight",
+   902→            cls[variant]
+   903→          )}
+   904→          title={s.name}
+   905→        >
+   906→          {s.name}
+   907→        </span>
+   908→      ))}
+   909→      {overflow > 0 && (
+   910→        <span
+   911→          className="inline-block text-[10px] px-1.5 py-0.5 rounded border border-foreground/20 bg-muted text-foreground/80 font-mono font-semibold tabular-nums leading-tight"
+   912→          title={`${overflow} more: ${items.slice(max).map((s) => s.name).join(", ")}`}
+   913→        >
+   914→          +{overflow}
+   915→        </span>
+   916→      )}
+   917→    </div>
+   918→  );
+   919→}
+   920→
