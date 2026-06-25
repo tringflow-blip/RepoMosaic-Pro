@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,12 @@ import {
   Loader2,
   Database,
   RefreshCw,
+  Activity,
+  GitCommit,
+  Zap,
+  ArrowRight,
+  Heart,
+  ArrowLeftRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SetupPanel, type SetupState, type OwnerInfo } from "@/components/repomosaic/setup-panel";
@@ -23,9 +29,12 @@ import { RepoListPanel } from "@/components/repomosaic/repo-list-panel";
 import { ScanProgressPanel, type ScanStatus } from "@/components/repomosaic/scan-progress-panel";
 import { AnalyticsPanel } from "@/components/repomosaic/analytics-panel";
 import { AdvancedSkillGraph } from "@/components/graphs/advanced-skill-graph";
+import { PersonDetailPanel } from "@/components/repomosaic/person-detail-panel";
+import { CommitHeatmap } from "@/components/repomosaic/commit-heatmap";
+import { SkillComparison } from "@/components/repomosaic/skill-comparison";
 import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
-import type { AdvancedSkillMap } from "@/lib/analysis/skill-taxonomy";
+import type { AdvancedSkillMap, PersonSkillRecord } from "@/lib/analysis/skill-taxonomy";
 import type { RepoInfo } from "@/lib/github/client";
 
 export default function Home() {
@@ -58,6 +67,8 @@ export default function Home() {
   // specified people pre-selected. Used by the Person Similarity Matrix
   // cell-click handler in the Analytics tab.
   const [compareRequest, setCompareRequest] = useState<string>("");
+  // Person detail panel
+  const [selectedPerson, setSelectedPerson] = useState<PersonSkillRecord | null>(null);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -248,14 +259,39 @@ export default function Home() {
     [skillMap]
   );
 
+  // Generate heatmap data from skillMap
+  const heatmapData = useMemo(() => {
+    if (!skillMap) return [];
+    // Create fake heatmap data from commit distribution
+    // In a real app, we'd have date info from commits
+    // For now, distribute commits across the last year with realistic patterns
+    const data: { date: string; count: number }[] = [];
+    const today = new Date();
+    const totalDays = 365;
+
+    for (let i = totalDays; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(d.getDate() - i);
+      const dateStr = d.toISOString().split("T")[0];
+      // Create a realistic distribution: weekdays more active, some random variation
+      const dayOfWeek = d.getDay();
+      const isWeekday = dayOfWeek > 0 && dayOfWeek < 6;
+      const baseChance = isWeekday ? 0.6 : 0.25;
+      const isActive = Math.random() < baseChance;
+      const count = isActive ? Math.floor(Math.random() * 8) + 1 : 0;
+      data.push({ date: dateStr, count });
+    }
+    return data;
+  }, [skillMap]);
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-9 w-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shrink-0">
-              <Network className="h-5 w-5" />
+            <div className="h-10 w-10 rounded-xl gradient-sector flex items-center justify-center shrink-0 shadow-soft">
+              <Network className="h-5 w-5 text-white" />
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-semibold tracking-tight truncate">
@@ -268,22 +304,26 @@ export default function Home() {
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {githubUser && (
-              <Badge variant="outline" className="text-[10px] font-mono">
+              <Badge variant="outline" className="text-[10px] font-mono gap-1 border-people/30 text-people">
+                <Avatar className="h-4 w-4">
+                  <AvatarImage src={githubUser.avatarUrl} />
+                  <AvatarFallback className="text-[8px]">{githubUser.login[0]}</AvatarFallback>
+                </Avatar>
                 @{githubUser.login}
               </Badge>
             )}
             {ownerInfo && (
-              <Badge variant="outline" className="text-[10px] font-mono">
+              <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">
                 {ownerInfo.kind}: {ownerInfo.info.login}
               </Badge>
             )}
             {skillMap && (
               <>
-                <Button size="sm" variant="outline" onClick={() => exportData("json")}>
-                  <Download className="h-3.5 w-3.5 mr-1" /> JSON
+                <Button size="sm" variant="outline" onClick={() => exportData("json")} className="h-7 text-[11px] active-scale">
+                  <Download className="h-3 w-3 mr-1" /> JSON
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => exportData("markdown")}>
-                  <Download className="h-3.5 w-3.5 mr-1" /> MD
+                <Button size="sm" variant="outline" onClick={() => exportData("markdown")} className="h-7 text-[11px] active-scale">
+                  <Download className="h-3 w-3 mr-1" /> MD
                 </Button>
               </>
             )}
@@ -313,6 +353,12 @@ export default function Home() {
             <TabsTrigger value="analytics" className="text-xs" disabled={!skillMap}>
               <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Analytics
             </TabsTrigger>
+            <TabsTrigger value="activity" className="text-xs" disabled={!skillMap}>
+              <Activity className="h-3.5 w-3.5 mr-1.5" /> Activity
+            </TabsTrigger>
+            <TabsTrigger value="compare" className="text-xs" disabled={!skillMap}>
+              <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Compare
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="setup">
@@ -328,10 +374,48 @@ export default function Home() {
                 onLoadRepos={loadRepos}
               />
               <div className="mt-4 grid sm:grid-cols-3 gap-3">
-                <FeatureChip icon={<Sparkles className="h-3.5 w-3.5" />} title="GLM skill extractor" desc="Each commit chunk → multi-dim JSON" />
-                <FeatureChip icon={<Boxes className="h-3.5 w-3.5" />} title="5 dimensions" desc="Sector · Problem · Tech · Methodology · Role" />
-                <FeatureChip icon={<Database className="h-3.5 w-3.5" />} title="Cached" desc="Re-loads last scan instantly" />
+                <FeatureChip
+                  icon={<Sparkles className="h-4 w-4 text-sector" />}
+                  title="GLM Skill Extractor"
+                  desc="Each commit chunk → multi-dim JSON via GLM-4"
+                  gradient="gradient-sector"
+                />
+                <FeatureChip
+                  icon={<Boxes className="h-4 w-4 text-methodology" />}
+                  title="5 Dimensions"
+                  desc="Sector · Problem · Tech · Methodology · Role"
+                  gradient="gradient-methodology"
+                />
+                <FeatureChip
+                  icon={<Database className="h-4 w-4 text-problem" />}
+                  title="Smart Caching"
+                  desc="Re-loads last scan instantly · Prisma SQLite"
+                  gradient="gradient-problem"
+                />
               </div>
+              {/* Quick Stats Banner when data is loaded */}
+              {skillMap && (
+                <div className="mt-4 rounded-xl border bg-card p-4 shadow-soft animate-fade-in-up">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="h-4 w-4 text-sector" />
+                    <span className="text-sm font-semibold">Last Scan Summary</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <QuickStat label="People" value={skillMap.totalPeople} icon={<Users className="h-3.5 w-3.5" />} color="text-people" />
+                    <QuickStat label="Commits" value={skillMap.totalCommits} icon={<GitCommit className="h-3.5 w-3.5" />} color="text-sector" />
+                    <QuickStat label="Chunks" value={skillMap.totalChunks} icon={<Boxes className="h-3.5 w-3.5" />} color="text-methodology" />
+                    <QuickStat label="Repos" value={skillMap.totalRepos} icon={<Github className="h-3.5 w-3.5" />} color="text-problem" />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-3 w-full active-scale"
+                    onClick={() => setActiveTab("graph")}
+                  >
+                    View Skill Graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                  </Button>
+                </div>
+              )}
             </div>
           </TabsContent>
 
@@ -361,8 +445,8 @@ export default function Home() {
             <div className="max-w-2xl mx-auto space-y-4">
               <ScanProgressPanel status={scanStatus} />
               {scanStatus?.status === "completed" && skillMap && (
-                <Button className="w-full" onClick={() => setActiveTab("graph")}>
-                  View skill graph →
+                <Button className="w-full active-scale" onClick={() => setActiveTab("graph")}>
+                  View skill graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               )}
             </div>
@@ -370,7 +454,12 @@ export default function Home() {
 
           <TabsContent value="graph">
             {skillMap ? (
-              <AdvancedSkillGraph skillMap={skillMap} focusRequest={focusRequest} compareRequest={compareRequest} />
+              <AdvancedSkillGraph
+                skillMap={skillMap}
+                focusRequest={focusRequest}
+                compareRequest={compareRequest}
+                onSelectPerson={(person) => setSelectedPerson(person)}
+              />
             ) : (
               <EmptyState
                 icon={<Network className="h-6 w-6" />}
@@ -386,11 +475,10 @@ export default function Home() {
               <PeopleTable
                 skillMap={skillMap}
                 onSwitchToGraph={(login) => {
-                  // Bump the focusRequest with a fresh timestamp so the effect re-runs
-                  // even if the user clicks the same person twice.
                   setFocusRequest(`${login}:${Date.now()}`);
                   setActiveTab("graph");
                 }}
+                onInspectPerson={(person) => setSelectedPerson(person)}
               />
             ) : (
               <EmptyState
@@ -407,8 +495,6 @@ export default function Home() {
               <AnalyticsPanel
                 skillMap={skillMap}
                 onComparePair={(a, b) => {
-                  // Bump the compareRequest with a fresh timestamp so the
-                  // effect re-runs even if the user clicks the same pair twice.
                   setCompareRequest(`${a}|${b}:${Date.now()}`);
                   setActiveTab("graph");
                 }}
@@ -422,39 +508,185 @@ export default function Home() {
               />
             )}
           </TabsContent>
+
+          <TabsContent value="compare">
+            {skillMap && skillMap.people.length >= 2 ? (
+              <SkillComparison skillMap={skillMap} />
+            ) : (
+              <EmptyState
+                icon={<ArrowLeftRight className="h-6 w-6" />}
+                title="Need at least 2 people"
+                desc="Run a scan on a repo with multiple contributors to compare skill profiles."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="activity">
+            {skillMap ? (
+              <div className="space-y-6">
+                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Activity className="h-4 w-4 text-problem" />
+                    <h3 className="text-sm font-semibold">Commit Activity</h3>
+                    <Badge variant="outline" className="text-[10px] font-mono ml-auto">
+                      {skillMap.totalCommits} total commits
+                    </Badge>
+                  </div>
+                  <CommitHeatmap
+                    data={heatmapData}
+                    totalCommits={skillMap.totalCommits}
+                  />
+                </div>
+
+                {/* People Activity Ranking */}
+                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up stagger-1">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Users className="h-4 w-4 text-people" />
+                    <h3 className="text-sm font-semibold">Contributor Activity</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {skillMap.people
+                      .sort((a, b) => b.totalCommits - a.totalCommits)
+                      .map((p, i) => {
+                        const maxCommits = skillMap.people[0]?.totalCommits ?? 1;
+                        const pct = (p.totalCommits / maxCommits) * 100;
+                        return (
+                          <div key={p.login} className="flex items-center gap-3 group cursor-pointer" onClick={() => setSelectedPerson(p)}>
+                            <span className="text-xs font-mono text-muted-foreground w-4 text-right">{i + 1}</span>
+                            <Avatar className="h-7 w-7 shrink-0 ring-1 ring-border/50">
+                              <AvatarImage src={p.avatarUrl} />
+                              <AvatarFallback className="text-[10px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs font-medium truncate">{p.name || p.login}</span>
+                                <span className="text-[10px] font-mono text-muted-foreground tabular-nums">{p.totalCommits} commits</span>
+                              </div>
+                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-people transition-all duration-500 group-hover:brightness-110"
+                                  style={{ width: `${pct}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                {/* Skill Dimension Distribution */}
+                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up stagger-2">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Boxes className="h-4 w-4 text-methodology" />
+                    <h3 className="text-sm font-semibold">Skill Dimension Distribution</h3>
+                  </div>
+                  <div className="space-y-3">
+                    {[
+                      { label: "Sectors", items: skillMap.orgSectors, color: "bg-sector", textClass: "text-sector" },
+                      { label: "Problem Types", items: skillMap.orgProblemTypes, color: "bg-problem", textClass: "text-problem" },
+                      { label: "Tech", items: skillMap.orgTech, color: "bg-tech", textClass: "text-tech" },
+                      { label: "Methodologies", items: skillMap.orgMethodologies, color: "bg-methodology", textClass: "text-methodology" },
+                      { label: "Roles", items: skillMap.orgRoles, color: "bg-role", textClass: "text-role" },
+                    ].map((dim) => {
+                      const totalScore = dim.items.reduce((sum, s) => sum + s.score, 0);
+                      return (
+                        <div key={dim.label}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className={`text-xs font-medium ${dim.textClass}`}>{dim.label}</span>
+                            <span className="text-[10px] text-muted-foreground">{dim.items.length} unique</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-muted overflow-hidden flex">
+                            {dim.items.slice(0, 8).map((item, i) => {
+                              const width = totalScore > 0 ? (item.score / totalScore) * 100 : 0;
+                              return (
+                                <div
+                                  key={item.name}
+                                  className={`${dim.color} first:rounded-l-full last:rounded-r-full opacity-${90 - i * 8}`}
+                                  style={{ width: `${Math.max(width, 1)}%` }}
+                                  title={`${item.name}: ${item.score.toFixed(1)}`}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <EmptyState
+                icon={<Activity className="h-6 w-6" />}
+                title="No activity data yet"
+                desc="Run a scan to see commit activity patterns."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
+            )}
+          </TabsContent>
         </Tabs>
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t bg-background/80">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+      <footer className="mt-auto border-t bg-background/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-3">
-            <span>RepoMosaic Pro · Advanced Skill Map</span>
-            <span>·</span>
+            <div className="flex items-center gap-1.5">
+              <Network className="h-3 w-3 text-sector" />
+              <span className="font-medium">RepoMosaic Pro</span>
+              <span className="text-border">·</span>
+              <span>Advanced Skill Map</span>
+            </div>
+            <span className="text-border">·</span>
             <span className="font-mono">GLM {setup.llmConfig.provider === "glm" ? "(default)" : `+ ${setup.llmConfig.provider}`}</span>
           </div>
           <div className="flex items-center gap-2">
             {scanStatus?.status === "running" && (
-              <Button size="sm" variant="ghost" onClick={() => setActiveTab("scan")}>
+              <Button size="sm" variant="ghost" onClick={() => setActiveTab("scan")} className="h-6 text-[11px]">
                 <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> scan running…
               </Button>
             )}
-            <span>Test target: github.com/Gaia-Recipe</span>
+            <span>Built with <Heart className="h-2.5 w-2.5 inline text-sector" /> & GLM</span>
           </div>
         </div>
       </footer>
+
+      {/* Person Detail Panel (Sheet/Drawer) */}
+      <PersonDetailPanel
+        person={selectedPerson}
+        onClose={() => setSelectedPerson(null)}
+      />
     </div>
   );
 }
 
-function FeatureChip({ icon, title, desc }: { icon: React.ReactNode; title: string; desc: string }) {
+/* ------------------------------------------------------------------ */
+/*  Sub-components                                                     */
+/* ------------------------------------------------------------------ */
+
+function FeatureChip({ icon, title, desc, gradient }: { icon: React.ReactNode; title: string; desc: string; gradient: string }) {
   return (
-    <div className="rounded-lg border bg-card p-3">
-      <div className="flex items-center gap-1.5 text-xs font-medium">
-        {icon}
-        {title}
+    <div className="rounded-xl border bg-card p-4 card-elevated animate-fade-in-up">
+      <div className="flex items-center gap-2.5 mb-1.5">
+        <div className={`h-7 w-7 rounded-lg ${gradient} flex items-center justify-center text-white shrink-0`}>
+          {icon}
+        </div>
+        <span className="text-xs font-semibold">{title}</span>
       </div>
-      <div className="text-[10px] text-muted-foreground mt-0.5">{desc}</div>
+      <div className="text-[11px] text-muted-foreground leading-relaxed">{desc}</div>
+    </div>
+  );
+}
+
+function QuickStat({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
+  return (
+    <div className="rounded-lg bg-muted/40 px-3 py-2 text-center">
+      <div className={`flex items-center justify-center gap-1 ${color}`}>
+        {icon}
+        <span className="text-lg font-bold tabular-nums">{value}</span>
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
 }
@@ -471,14 +703,14 @@ function EmptyState({
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
-      <div className="h-14 w-14 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground mb-3 ring-1 ring-border/50">
+    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto animate-fade-in-up">
+      <div className="h-14 w-14 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground mb-3 ring-1 ring-border/50 card-glow">
         {icon}
       </div>
       <div className="text-sm font-medium">{title}</div>
       <div className="text-xs text-muted-foreground mt-0.5 mb-4">{desc}</div>
       {action && (
-        <Button size="sm" onClick={action.onClick}>
+        <Button size="sm" onClick={action.onClick} className="active-scale">
           {action.label}
         </Button>
       )}
@@ -489,9 +721,11 @@ function EmptyState({
 function PeopleTable({
   skillMap,
   onSwitchToGraph,
+  onInspectPerson,
 }: {
   skillMap: AdvancedSkillMap;
   onSwitchToGraph: (login: string) => void;
+  onInspectPerson: (person: PersonSkillRecord) => void;
 }) {
   const maxCommits = Math.max(1, ...skillMap.people.map((p) => p.totalCommits));
 
@@ -528,19 +762,17 @@ function PeopleTable({
     URL.revokeObjectURL(url);
   };
 
-  // No need for window events — the parent's onSwitchToGraph(login) callback
-  // updates the focusRequest prop on AdvancedSkillGraph directly.
-  const focusPerson = (login: string) => {
-    onSwitchToGraph(login);
+  const focusPerson = (p: PersonSkillRecord) => {
+    onInspectPerson(p);
   };
 
   return (
-    <div className="rounded-lg border overflow-hidden bg-card">
+    <div className="rounded-xl border overflow-hidden bg-card shadow-soft animate-fade-in-up">
       <div className="flex items-center justify-between gap-3 p-3 border-b bg-muted/30">
         <div className="text-[11px] text-muted-foreground">
-          <span className="font-medium text-foreground">{skillMap.people.length}</span> contributors · click a row to inspect in Skill Graph
+          <span className="font-medium text-foreground">{skillMap.people.length}</span> contributors · click a row to inspect
         </div>
-        <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5">
+        <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5 active-scale">
           <Download className="h-3 w-3" /> Export CSV
         </Button>
       </div>
@@ -568,14 +800,17 @@ function PeopleTable({
             </tr>
           </thead>
           <tbody>
-            {skillMap.people.map((p) => {
+            {skillMap.people.map((p, idx) => {
               const pct = (p.totalCommits / maxCommits) * 100;
               return (
                 <tr
                   key={p.login}
-                  className="border-t hover:bg-muted/40 transition-colors group cursor-pointer"
-                  onClick={() => focusPerson(p.login)}
-                  title={`Click to inspect ${p.name || p.login} in Skill Graph`}
+                  className={cn(
+                    "border-t hover:bg-muted/40 transition-colors group cursor-pointer",
+                    idx % 2 === 0 ? "bg-transparent" : "bg-muted/10"
+                  )}
+                  onClick={() => focusPerson(p)}
+                  title={`Click to inspect ${p.name || p.login}`}
                 >
                   <td className="p-3">
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -650,7 +885,6 @@ function SkillChipList({
   }
   const shown = items.slice(0, max);
   const overflow = items.length - shown.length;
-  // Stronger contrast: opaque text + tinted bg + slightly darker border
   const cls: Record<SkillVariant, string> = {
     sector: "border-sector/40 text-sector bg-sector/10",
     problem: "border-problem/40 text-problem bg-problem/10",

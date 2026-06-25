@@ -43,6 +43,8 @@ type Props = {
    *  people pre-selected. Format: `${loginA}|${loginB}:${timestamp}`.
    *  Used by the Person Similarity Matrix cell-click handler. */
   compareRequest?: string;
+  /** Called when user selects a person in the graph or sidebar. */
+  onSelectPerson?: (person: PersonSkillRecord) => void;
 };
 
 const DIMENSIONS: { key: SkillDimension; label: string; icon: typeof Compass; color: string }[] = [
@@ -53,7 +55,7 @@ const DIMENSIONS: { key: SkillDimension; label: string; icon: typeof Compass; co
   { key: "role", label: "Roles", icon: Shield, color: "text-role" },
 ];
 
-export function AdvancedSkillGraph({ skillMap, focusRequest, compareRequest }: Props) {
+export function AdvancedSkillGraph({ skillMap, focusRequest, compareRequest, onSelectPerson }: Props) {
   const [dimension, setDimension] = useState<SkillDimension>("sector");
   const [search, setSearch] = useState("");
   const [selectedLogin, setSelectedLogin] = useState<string | null>(null);
@@ -140,6 +142,11 @@ export function AdvancedSkillGraph({ skillMap, focusRequest, compareRequest }: P
       );
     } else {
       setSelectedLogin(selectedLogin === login ? null : login);
+    }
+    // Trigger onSelectPerson callback
+    if (onSelectPerson) {
+      const person = skillMap.people.find((p) => p.login === login);
+      if (person) onSelectPerson(person);
     }
   };
 

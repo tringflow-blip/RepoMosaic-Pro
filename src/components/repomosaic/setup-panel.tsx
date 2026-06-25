@@ -20,6 +20,9 @@ import {
   PlugZap,
   Eye,
   EyeOff,
+  Network,
+  Boxes,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
@@ -126,35 +129,41 @@ export function SetupPanel({
   const ready = !!githubUser && !!ownerInfo;
 
   return (
-    <Card>
+    <Card className="shadow-soft-lg animate-fade-in-up">
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <Settings2 className="h-4 w-4" />
+              <div className="h-6 w-6 rounded-md gradient-sector flex items-center justify-center">
+                <Settings2 className="h-3.5 w-3.5 text-white" />
+              </div>
               Setup
             </CardTitle>
-            <CardDescription className="mt-1">
-              Connect GitHub + configure the LLM skill. GLM is pre-wired; you can also point at any
-              OpenAI-compatible cloud or local endpoint (codecs/Ollama/vLLM).
+            <CardDescription className="mt-1.5">
+              Connect GitHub + configure the LLM skill extractor. GLM is pre-wired; you can also point at any
+              OpenAI-compatible cloud or local endpoint.
             </CardDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme">
+          <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="shrink-0 active-scale">
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
         <Tabs defaultValue="github">
-          <TabsList>
-            <TabsTrigger value="github"><Github className="h-3.5 w-3.5 mr-1.5" /> GitHub</TabsTrigger>
-            <TabsTrigger value="llm"><Sparkles className="h-3.5 w-3.5 mr-1.5" /> LLM Skill</TabsTrigger>
+          <TabsList className="w-full">
+            <TabsTrigger value="github" className="flex-1 text-xs">
+              <Github className="h-3 w-3 mr-1.5" /> GitHub
+            </TabsTrigger>
+            <TabsTrigger value="llm" className="flex-1 text-xs">
+              <Sparkles className="h-3 w-3 mr-1.5" /> LLM Skill
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="github" className="space-y-3 mt-3">
             <div className="space-y-1.5">
               <Label htmlFor="gh-token" className="text-xs flex items-center gap-1.5">
-                <KeyRound className="h-3 w-3" /> GitHub Personal Access Token
+                <KeyRound className="h-3 w-3 text-sector" /> GitHub Personal Access Token
               </Label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -164,24 +173,24 @@ export function SetupPanel({
                     placeholder="ghp_... or github_pat_..."
                     value={setup.githubToken}
                     onChange={(e) => setSetup({ ...setup, githubToken: e.target.value })}
-                    className="pr-9 font-mono text-xs h-9"
+                    className="pr-9 font-mono text-xs h-9 focus-ring"
                   />
                   <button
                     type="button"
                     onClick={() => setShowGithubToken(!showGithubToken)}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {showGithubToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </button>
                 </div>
-                <Button onClick={handleVerifyGithub} disabled={verifyingGithub} size="sm" className="h-9">
+                <Button onClick={handleVerifyGithub} disabled={verifyingGithub} size="sm" className="h-9 active-scale">
                   {verifyingGithub ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sign in"}
                 </Button>
               </div>
               {githubUser && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                  Authenticated as <Badge variant="outline" className="text-[10px] font-mono">@{githubUser.login}</Badge>
+                  Authenticated as <Badge variant="outline" className="text-[10px] font-mono border-people/30 text-people">@{githubUser.login}</Badge>
                   {githubUser.name && <span>· {githubUser.name}</span>}
                 </div>
               )}
@@ -190,25 +199,28 @@ export function SetupPanel({
             <Separator />
 
             <div className="space-y-1.5">
-              <Label htmlFor="owner" className="text-xs">Organization or User URL</Label>
+              <Label htmlFor="owner" className="text-xs flex items-center gap-1.5">
+                <Network className="h-3 w-3 text-problem" /> Organization or User URL
+              </Label>
               <div className="flex gap-2">
                 <Input
                   id="owner"
                   placeholder="https://github.com/Gaia-Recipe"
                   value={setup.ownerInput}
                   onChange={(e) => setSetup({ ...setup, ownerInput: e.target.value })}
-                  className="font-mono text-xs h-9"
+                  className="font-mono text-xs h-9 focus-ring"
                 />
-                <Button onClick={handleResolveOwner} disabled={resolvingOwner} size="sm" className="h-9">
+                <Button onClick={handleResolveOwner} disabled={resolvingOwner} size="sm" className="h-9 active-scale">
                   {resolvingOwner ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Load"}
                 </Button>
               </div>
               {ownerInfo && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                   Loaded {ownerInfo.kind}
-                  <Badge variant="outline" className="text-[10px] font-mono">@{ownerInfo.info.login}</Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">@{ownerInfo.info.login}</Badge>
                   {ownerInfo.info.publicRepos != null && <span>· {ownerInfo.info.publicRepos} public repos</span>}
+                  {ownerInfo.info.followers > 0 && <span>· {ownerInfo.info.followers} followers</span>}
                 </div>
               )}
             </div>
@@ -216,10 +228,16 @@ export function SetupPanel({
             <Button
               onClick={onLoadRepos}
               disabled={!ready}
-              className="w-full"
+              className="w-full active-scale"
               size="sm"
             >
-              Continue to repos →
+              {ready ? (
+                <>
+                  Continue to repos <Zap className="h-3.5 w-3.5 ml-1.5" />
+                </>
+              ) : (
+                "Sign in + Load org first"
+              )}
             </Button>
           </TabsContent>
 
@@ -244,10 +262,19 @@ export function SetupPanel({
             </Tabs>
 
             {setup.llmConfig.provider === "glm" && (
-              <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-lg bg-muted/40 border border-border/60">
-                <div className="font-medium text-foreground">GLM via z-ai-web-dev-sdk</div>
+              <div className="text-[11px] text-muted-foreground space-y-2 p-4 rounded-xl bg-muted/40 border border-border/60 animate-fade-in-up">
+                <div className="flex items-center gap-2">
+                  <div className="h-5 w-5 rounded gradient-methodology flex items-center justify-center shrink-0">
+                    <Sparkles className="h-3 w-3 text-white" />
+                  </div>
+                  <span className="font-medium text-foreground text-xs">GLM via z-ai-web-dev-sdk</span>
+                </div>
                 <div>The skill extractor uses the pre-authenticated GLM SDK. No API key required in this sandbox — every commit chunk is sent through the same reusable skill prompt.</div>
-                <div className="font-mono text-[10px]">model: glm (auto) · temperature: 0.2</div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Badge variant="outline" className="text-[9px] font-mono py-0">model: glm (auto)</Badge>
+                  <Badge variant="outline" className="text-[9px] font-mono py-0">temperature: 0.2</Badge>
+                  <Badge variant="outline" className="text-[9px] font-mono py-0">5 dimensions</Badge>
+                </div>
               </div>
             )}
 
@@ -261,7 +288,7 @@ export function SetupPanel({
                     onChange={(e) =>
                       setSetup({ ...setup, llmConfig: { ...setup.llmConfig, baseURL: e.target.value } })
                     }
-                    className="font-mono text-xs h-9"
+                    className="font-mono text-xs h-9 focus-ring"
                   />
                 </div>
                 <div className="space-y-1">
@@ -274,7 +301,7 @@ export function SetupPanel({
                       onChange={(e) =>
                         setSetup({ ...setup, llmConfig: { ...setup.llmConfig, apiKey: e.target.value } })
                       }
-                      className="pr-9 font-mono text-xs h-9"
+                      className="pr-9 font-mono text-xs h-9 focus-ring"
                     />
                     <button
                       type="button"
@@ -293,18 +320,18 @@ export function SetupPanel({
                     onChange={(e) =>
                       setSetup({ ...setup, llmConfig: { ...setup.llmConfig, model: e.target.value } })
                     }
-                    className="font-mono text-xs h-9"
+                    className="font-mono text-xs h-9 focus-ring"
                   />
                 </div>
               </div>
             )}
 
-            <Button onClick={handlePingLLM} disabled={pingingLLM} variant="outline" size="sm" className="w-full">
+            <Button onClick={handlePingLLM} disabled={pingingLLM} variant="outline" size="sm" className="w-full active-scale">
               {pingingLLM ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <PlugZap className="h-3.5 w-3.5 mr-1.5" />}
               Test LLM connection
             </Button>
             {llmOk !== null && (
-              <div className={cn("text-xs flex items-center gap-1.5", llmOk ? "text-emerald-600" : "text-destructive")}>
+              <div className={cn("text-xs flex items-center gap-1.5 animate-fade-in-up", llmOk ? "text-emerald-600" : "text-destructive")}>
                 {llmOk ? <CheckCircle2 className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
                 {llmOk ? "LLM reachable" : "LLM unreachable — check config"}
               </div>
