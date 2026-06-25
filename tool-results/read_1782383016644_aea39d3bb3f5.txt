@@ -1,0 +1,781 @@
+     1→"use client";
+     2→
+     3→import { useState, useEffect, useCallback } from "react";
+     4→import { Button } from "@/components/ui/button";
+     5→import { Input } from "@/components/ui/input";
+     6→import { Label } from "@/components/ui/label";
+     7→import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+     8→import { Badge } from "@/components/ui/badge";
+     9→import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+    10→import { Checkbox } from "@/components/ui/checkbox";
+    11→import { Switch } from "@/components/ui/switch";
+    12→import { Progress } from "@/components/ui/progress";
+    13→import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+    14→import {
+    15→  Dialog,
+    16→  DialogContent,
+    17→  DialogDescription,
+    18→  DialogFooter,
+    19→  DialogHeader,
+    20→  DialogTitle,
+    21→  DialogTrigger,
+    22→} from "@/components/ui/dialog";
+    23→import {
+    24→  Select,
+    25→  SelectContent,
+    26→  SelectItem,
+    27→  SelectTrigger,
+    28→  SelectValue,
+    29→} from "@/components/ui/select";
+    30→import {
+    31→  Github,
+    32→  FolderOpen,
+    33→  Search,
+    34→  CheckCircle2,
+    35→  Loader2,
+    36→  Sparkles,
+    37→  GitBranch,
+    38→  Users,
+    39→  Network,
+    40→  BarChart3,
+    41→  FolderTree,
+    42→  X,
+    43→  ChevronDown,
+    44→  ChevronUp,
+    45→  Sun,
+    46→  Moon,
+    47→  KeyRound,
+    48→  LogOut,
+    49→  RefreshCw,
+    50→} from "lucide-react";
+    51→import { useWorkspace, loadSettings, saveSettings, buildFolderLayout } from "@/lib/storage/workspace";
+    52→import { useToast } from "@/hooks/use-toast";
+    53→import { cn } from "@/lib/utils";
+    54→import { CapabilityGraph } from "@/components/graphs/capability-graph";
+    55→import { SkillGraphView } from "@/components/graphs/skill-graph";
+    56→import { RepoListPanel } from "@/components/repomosaic/repo-list-panel";
+    57→import { ScanProgressPanel } from "@/components/repomosaic/scan-progress-panel";
+    58→import { AnalyticsPanel } from "@/components/repomosaic/analytics-panel";
+    59→
+    60→type Viewer = {
+    61→  login: string;
+    62→  name: string | null;
+    63→  avatarUrl: string;
+    64→  scopes: string[];
+    65→};
+    66→
+    67→type Org = {
+    68→  kind: "org" | "user";
+    69→  login: string;
+    70→  name: string | null;
+    71→  description: string | null;
+    72→  avatarUrl: string;
+    73→  url: string;
+    74→  publicRepos: number;
+    75→};
+    76→
+    77→type Repo = {
+    78→  id: number;
+    79→  name: string;
+    80→  fullName: string;
+    81→  description: string | null;
+    82→  language: string | null;
+    83→  stars: number;
+    84→  forks: number;
+    85→  updatedAt: string;
+    86→  defaultBranch: string;
+    87→  url: string;
+    88→  isArchived: boolean;
+    89→  isFork: boolean;
+    90→  size: number;
+    91→};
+    92→
+    93→type ScanResult = {
+    94→  org: string;
+    95→  workspacePath: string;
+    96→  branchMode: "main" | "all";
+    97→  scannedAt: string;
+    98→  repos: {
+    99→    name: string;
+   100→    fullName: string;
+   101→    description: string | null;
+   102→    language: string | null;
+   103→    stars: number;
+   104→    defaultBranch: string;
+   105→    branches: string[];
+   106→    commitCount: number;
+   107→    contributorCount: number;
+   108→    fileCount: number;
+   109→  }[];
+   110→  capabilityDNA: {
+   111→    org: string;
+   112→    generatedAt: string;
+   113→    strands: {
+   114→      name: string;
+   115→      confidence: number;
+   116→      repos: string[];
+   117→      contributors: string[];
+   118→      evidence: { repo: string; path: string; reason: string }[];
+   119→    }[];
+   120→    totalRepos: number;
+   121→    totalContributors: number;
+   122→  };
+   123→  capabilityGraph: {
+   124→    nodes: { id: string; confidence: number; repoCount: number; contributorCount: number; label: string }[];
+   125→    edges: { source: string; target: string; weight: number }[];
+   126→  };
+   127→  skillMap: {
+   128→    org: string;
+   129→    generatedAt: string;
+   130→    people: {
+   131→      login: string;
+   132→      name: string | null;
+   133→      avatarUrl: string;
+   134→      url: string;
+   135→      totalCommits: number;
+   136→      repos: string[];
+   137→      skills: { name: string; score: number; commits: number }[];
+   138→      ownership: { repo: string; share: number; commits: number }[];
+   139→    }[];
+   140→  };
+   141→  skillGraph: {
+   142→    nodes: { id: string; label: string; avatar: string; commits: number; repoCount: number; topSkill: string }[];
+   143→    edges: { source: string; target: string; weight: number }[];
+   144→  };
+   145→  branchesByRepo: Record<string, string[]>;
+   146→  commitsByRepo: Record<string, { sha: string; message: string; author: string; authorLogin: string | null; date: string }[]>;
+   147→};
+   148→
+   149→export default function Home() {
+   150→  const { toast } = useToast();
+   151→  const { state: workspace, selectFolder, isLoading: wsLoading } = useWorkspace();
+   152→  const [settings, setSettings] = useState(loadSettings());
+   153→
+   154→  // Theme
+   155→  const [theme, setTheme] = useState<"light" | "dark">(settings.theme);
+   156→  useEffect(() => {
+   157→    document.documentElement.classList.toggle("dark", theme === "dark");
+   158→    saveSettings({ theme });
+   159→  }, [theme]);
+   160→
+   161→  // Auth
+   162→  const [token, setToken] = useState(settings.githubToken ?? "");
+   163→  const [viewer, setViewer] = useState<Viewer | null>(null);
+   164→  const [authLoading, setAuthLoading] = useState(false);
+   165→
+   166→  // Org
+   167→  const [orgInput, setOrgInput] = useState("");
+   168→  const [org, setOrg] = useState<Org | null>(null);
+   169→  const [orgLoading, setOrgLoading] = useState(false);
+   170→
+   171→  // Repos
+   172→  const [repos, setRepos] = useState<Repo[]>([]);
+   173→  const [repoFilter, setRepoFilter] = useState("");
+   174→  const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+   175→  const [showArchived, setShowArchived] = useState(false);
+   176→  const [showForks, setShowForks] = useState(false);
+   177→  const [reposLoading, setReposLoading] = useState(false);
+   178→  const [branchesByRepo, setBranchesByRepo] = useState<Record<string, string[]>>({});
+   179→  const [branchMode, setBranchMode] = useState<"main" | "all">(settings.defaultBranchMode);
+   180→
+   181→  // Scan
+   182→  const [scanId, setScanId] = useState<string | null>(null);
+   183→  const [scanProgress, setScanProgress] = useState<{
+   184→    phase: string;
+   185→    message: string;
+   186→    progress: number;
+   187→    totalRepos?: number;
+   188→    processedRepos?: number;
+   189→  } | null>(null);
+   190→  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
+   191→  const [polling, setPolling] = useState(false);
+   192→
+   193→  // Active tab
+   194→  const [activeTab, setActiveTab] = useState("setup");
+   195→
+   196→  // ---- Actions ----
+   197→  const handleAuth = useCallback(async () => {
+   198→    if (!token.trim()) {
+   199→      toast({ title: "Token required", variant: "destructive" });
+   200→      return;
+   201→    }
+   202→    setAuthLoading(true);
+   203→    try {
+   204→      const res = await fetch("/api/github/viewer", {
+   205→        method: "POST",
+   206→        headers: { "Content-Type": "application/json" },
+   207→        body: JSON.stringify({ token }),
+   208→      });
+   209→      if (!res.ok) {
+   210→        const e = await res.json();
+   211→        throw new Error(e.error || "Auth failed");
+   212→      }
+   213→      const v = await res.json();
+   214→      setViewer(v);
+   215→      saveSettings({ githubToken: token });
+   216→      toast({ title: `Signed in as ${v.login}` });
+   217→    } catch (e) {
+   218→      toast({
+   219→        title: "Authentication failed",
+   220→        description: e instanceof Error ? e.message : "Unknown error",
+   221→        variant: "destructive",
+   222→      });
+   223→    } finally {
+   224→      setAuthLoading(false);
+   225→    }
+   226→  }, [token, toast]);
+   227→
+   228→  const handleLoadOrg = useCallback(async () => {
+   229→    if (!orgInput.trim() || !token) {
+   230→      toast({ title: "Enter org URL and token first", variant: "destructive" });
+   231→      return;
+   232→    }
+   233→    setOrgLoading(true);
+   234→    setSelectedRepos(new Set());
+   235→    setRepos([]);
+   236→    setOrg(null);
+   237→    setScanResult(null);
+   238→    setScanId(null);
+   239→    setScanProgress(null);
+   240→    try {
+   241→      const res = await fetch("/api/github/org", {
+   242→        method: "POST",
+   243→        headers: { "Content-Type": "application/json" },
+   244→        body: JSON.stringify({ token, identifier: orgInput }),
+   245→      });
+   246→      if (!res.ok) {
+   247→        const e = await res.json();
+   248→        throw new Error(e.error || "Failed to load org");
+   249→      }
+   250→      const o = await res.json();
+   251→      setOrg(o);
+   252→      // Auto-fetch repos
+   253→      setReposLoading(true);
+   254→      const r2 = await fetch("/api/github/repos", {
+   255→        method: "POST",
+   256→        headers: { "Content-Type": "application/json" },
+   257→        body: JSON.stringify({ token, identifier: orgInput }),
+   258→      });
+   259→      if (!r2.ok) {
+   260→        const e = await r2.json();
+   261→        throw new Error(e.error || "Failed to load repos");
+   262→      }
+   263→      const r = await r2.json();
+   264→      const filtered: Repo[] = (r.repos as Repo[]).filter(
+   265→        (x) => (showArchived || !x.isArchived) && (showForks || !x.isFork)
+   266→      );
+   267→      setRepos(filtered);
+   268→      // All selected by default
+   269→      setSelectedRepos(new Set(filtered.map((x) => x.name)));
+   270→      // Fetch branches for each repo in parallel (limited)
+   271→      const branches: Record<string, string[]> = {};
+   272→      await Promise.all(
+   273→        filtered.slice(0, 50).map(async (repo) => {
+   274→          try {
+   275→            const r3 = await fetch("/api/github/branches", {
+   276→              method: "POST",
+   277→              headers: { "Content-Type": "application/json" },
+   278→              body: JSON.stringify({ token, owner: o.login, repo: repo.name }),
+   279→            });
+   280→            if (r3.ok) {
+   281→              const b = await r3.json();
+   282→              branches[repo.name] = b.branches.map((x: { name: string }) => x.name);
+   283→            }
+   284→          } catch {}
+   285→        })
+   286→      );
+   287→      setBranchesByRepo(branches);
+   288→      toast({ title: `Loaded ${filtered.length} repos from ${o.login}` });
+   289→    } catch (e) {
+   290→      toast({
+   291→        title: "Failed to load org",
+   292→        description: e instanceof Error ? e.message : "Unknown error",
+   293→        variant: "destructive",
+   294→      });
+   295→    } finally {
+   296→      setOrgLoading(false);
+   297→      setReposLoading(false);
+   298→    }
+   299→  }, [orgInput, token, showArchived, showForks, toast]);
+   300→
+   301→  const toggleRepo = (name: string) => {
+   302→    setSelectedRepos((cur) => {
+   303→      const next = new Set(cur);
+   304→      if (next.has(name)) next.delete(name);
+   305→      else next.add(name);
+   306→      return next;
+   307→    });
+   308→  };
+   309→
+   310→  const selectAll = () => setSelectedRepos(new Set(filteredRepos.map((r) => r.name)));
+   311→  const deselectAll = () => setSelectedRepos(new Set());
+   312→
+   313→  const filteredRepos = repos.filter((r) => {
+   314→    const q = repoFilter.toLowerCase();
+   315→    return (
+   316→      !q ||
+   317→      r.name.toLowerCase().includes(q) ||
+   318→      (r.description ?? "").toLowerCase().includes(q) ||
+   319→      (r.language ?? "").toLowerCase().includes(q)
+   320→    );
+   321→  });
+   322→
+   323→  // ---- Scan ----
+   324→  const startScan = useCallback(async () => {
+   325→    if (!token || !org || !workspace) {
+   326→      toast({ title: "Token, org, and folder are required", variant: "destructive" });
+   327→      return;
+   328→    }
+   329→    if (selectedRepos.size === 0) {
+   330→      toast({ title: "Select at least one repo", variant: "destructive" });
+   331→      return;
+   332→    }
+   333→    setScanResult(null);
+   334→    setScanProgress({ phase: "init", message: "Starting…", progress: 0 });
+   335→    setActiveTab("scan");
+   336→    try {
+   337→      const res = await fetch("/api/scan/start", {
+   338→        method: "POST",
+   339→        headers: { "Content-Type": "application/json" },
+   340→        body: JSON.stringify({
+   341→          token,
+   342→          identifier: orgInput,
+   343→          selectedRepos: Array.from(selectedRepos),
+   344→          branchMode,
+   345→          workspacePath: workspace.folderPath,
+   346→        }),
+   347→      });
+   348→      if (!res.ok) {
+   349→        const e = await res.json();
+   350→        throw new Error(e.error || "Failed to start scan");
+   351→      }
+   352→      const { scanId: sid } = await res.json();
+   353→      setScanId(sid);
+   354→      setPolling(true);
+   355→    } catch (e) {
+   356→      toast({
+   357→        title: "Scan failed to start",
+   358→        description: e instanceof Error ? e.message : "Unknown error",
+   359→        variant: "destructive",
+   360→      });
+   361→      setScanProgress(null);
+   362→    }
+   363→  }, [token, org, workspace, selectedRepos, branchMode, orgInput, toast]);
+   364→
+   365→  // Poll scan status
+   366→  useEffect(() => {
+   367→    if (!scanId || !polling) return;
+   368→    let stopped = false;
+   369→    const poll = async () => {
+   370→      try {
+   371→        const res = await fetch(`/api/scan/start?scanId=${scanId}`);
+   372→        if (!res.ok) return;
+   373→        const data = await res.json();
+   374→        if (stopped) return;
+   375→        setScanProgress({
+   376→          phase: data.phase,
+   377→          message: data.message,
+   378→          progress: data.progress,
+   379→          totalRepos: data.totalRepos,
+   380→          processedRepos: data.processedRepos,
+   381→        });
+   382→        if (data.phase === "done") {
+   383→          setPolling(false);
+   384→          setScanResult(data.result as ScanResult);
+   385→          setActiveTab("capability");
+   386→          toast({ title: "Scan complete", description: `Analyzed ${data.totalRepos} repos` });
+   387→        } else if (data.phase === "error") {
+   388→          setPolling(false);
+   389→          toast({
+   390→            title: "Scan failed",
+   391→            description: data.error,
+   392→            variant: "destructive",
+   393→          });
+   394→        }
+   395→      } catch {}
+   396→    };
+   397→    const interval = setInterval(poll, 1500);
+   398→    poll();
+   399→    return () => {
+   400→      stopped = true;
+   401→      clearInterval(interval);
+   402→    };
+   403→  }, [scanId, polling, toast]);
+   404→
+   405→  const folderLayout = workspace && org ? buildFolderLayout(workspace.folderPath, org.login) : null;
+   406→
+   407→  return (
+   408→    <div className="min-h-screen flex flex-col bg-background text-foreground">
+   409→      {/* Header */}
+   410→      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+   411→        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+   412→          <div className="flex h-16 items-center justify-between gap-4">
+   413→            <div className="flex items-center gap-3">
+   414→              <div className="relative h-9 w-9 rounded-lg bg-primary text-primary-foreground grid place-items-center shadow-soft">
+   415→                <Network className="h-5 w-5" strokeWidth={2.5} />
+   416→              </div>
+   417→              <div>
+   418→                <div className="text-base font-semibold tracking-tight">RepoMosaic</div>
+   419→                <div className="text-[11px] text-muted-foreground -mt-0.5">
+   420→                  Org Capability &amp; Skill Intelligence
+   421→                </div>
+   422→              </div>
+   423→            </div>
+   424→
+   425→            <div className="flex items-center gap-2">
+   426→              <Button
+   427→                variant="ghost"
+   428→                size="icon"
+   429→                onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+   430→                aria-label="Toggle theme"
+   431→              >
+   432→                {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+   433→              </Button>
+   434→
+   435→              {viewer ? (
+   436→                <div className="flex items-center gap-2 rounded-full border border-border/60 pl-1 pr-3 py-1 bg-card">
+   437→                  <Avatar className="h-7 w-7">
+   438→                    <AvatarImage src={viewer.avatarUrl} />
+   439→                    <AvatarFallback>{viewer.login[0]?.toUpperCase()}</AvatarFallback>
+   440→                  </Avatar>
+   441→                  <div className="hidden sm:block text-xs">
+   442→                    <div className="font-medium leading-tight">{viewer.name || viewer.login}</div>
+   443→                    <div className="text-muted-foreground leading-tight">@{viewer.login}</div>
+   444→                  </div>
+   445→                  <Button
+   446→                    variant="ghost"
+   447→                    size="icon"
+   448→                    className="h-6 w-6"
+   449→                    onClick={() => {
+   450→                      setViewer(null);
+   451→                      saveSettings({ githubToken: null });
+   452→                    }}
+   453→                    aria-label="Sign out"
+   454→                  >
+   455→                    <LogOut className="h-3.5 w-3.5" />
+   456→                  </Button>
+   457→                </div>
+   458→              ) : null}
+   459→            </div>
+   460→          </div>
+   461→        </div>
+   462→      </header>
+   463→
+   464→      <main className="flex-1 container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+   465→        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+   466→          <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 mb-6 h-auto">
+   467→            <TabsTrigger value="setup" className="py-2.5">
+   468→              <FolderOpen className="h-4 w-4 mr-2" /> Setup
+   469→            </TabsTrigger>
+   470→            <TabsTrigger value="repos" disabled={!org} className="py-2.5">
+   471→              <Github className="h-4 w-4 mr-2" /> Repos
+   472→              {selectedRepos.size > 0 && (
+   473→                <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">
+   474→                  {selectedRepos.size}
+   475→                </Badge>
+   476→              )}
+   477→            </TabsTrigger>
+   478→            <TabsTrigger value="scan" disabled={!org} className="py-2.5">
+   479→              <Sparkles className="h-4 w-4 mr-2" /> Scan
+   480→            </TabsTrigger>
+   481→            <TabsTrigger value="capability" disabled={!scanResult} className="py-2.5">
+   482→              <Network className="h-4 w-4 mr-2" /> Capabilities
+   483→            </TabsTrigger>
+   484→            <TabsTrigger value="people" disabled={!scanResult} className="py-2.5">
+   485→              <Users className="h-4 w-4 mr-2" /> People
+   486→            </TabsTrigger>
+   487→          </TabsList>
+   488→
+   489→          {/* SETUP TAB */}
+   490→          <TabsContent value="setup" className="space-y-6 animate-fade-in-up">
+   491→            <div className="grid gap-6 lg:grid-cols-3">
+   492→              {/* Step 1: Folder */}
+   493→              <Card className="lg:col-span-1">
+   494→                <CardHeader>
+   495→                  <div className="flex items-center gap-2">
+   496→                    <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
+   497→                      1
+   498→                    </div>
+   499→                    <CardTitle className="text-base">Workspace folder</CardTitle>
+   500→                  </div>
+   501→                  <CardDescription>
+   502→                    Pick where RepoMosaic stores everything (repos, skill maps, graphs).
+   503→                  </CardDescription>
+   504→                </CardHeader>
+   505→                <CardContent className="space-y-3">
+   506→                  {wsLoading ? (
+   507→                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+   508→                      <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+   509→                    </div>
+   510→                  ) : workspace ? (
+   511→                    <div className="space-y-3">
+   512→                      <div className="flex items-start gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
+   513→                        <FolderOpen className="h-4 w-4 mt-0.5 text-accent-warm" />
+   514→                        <div className="flex-1 min-w-0">
+   515→                          <div className="text-sm font-medium truncate">
+   516→                            {workspace.folderPath}
+   517→                          </div>
+   518→                          <div className="text-[11px] text-muted-foreground">
+   519→                            Last opened:{" "}
+   520→                            {workspace.lastOpened
+   521→                              ? new Date(workspace.lastOpened).toLocaleString()
+   522→                              : "just now"}
+   523→                          </div>
+   524→                        </div>
+   525→                        <CheckCircle2 className="h-4 w-4 text-success" />
+   526→                      </div>
+   527→                      <Button
+   528→                        variant="outline"
+   529→                        size="sm"
+   530→                        className="w-full"
+   531→                        onClick={() => selectFolder()}
+   532→                      >
+   533→                        <FolderOpen className="h-3.5 w-3.5 mr-2" />
+   534→                        Change folder
+   535→                      </Button>
+   536→                    </div>
+   537→                  ) : (
+   538→                    <Button onClick={() => selectFolder()} className="w-full">
+   539→                      <FolderOpen className="h-4 w-4 mr-2" />
+   540→                      Select folder
+   541→                    </Button>
+   542→                  )}
+   543→                  {folderLayout && (
+   544→                    <div className="rounded-lg border border-border/60 p-3 text-[11px] space-y-1 font-mono bg-muted/20">
+   545→                      <div className="text-muted-foreground mb-1">Folder structure:</div>
+   546→                      <div className="text-foreground/80">{folderLayout.root}/</div>
+   547→                      <div className="pl-3 text-foreground/60">├── repos/</div>
+   548→                      <div className="pl-3 text-foreground/60">├── skill-maps/</div>
+   549→                      <div className="pl-3 text-foreground/60">├── capability-graphs/</div>
+   550→                      <div className="pl-3 text-foreground/60">└── analytics/</div>
+   551→                    </div>
+   552→                  )}
+   553→                </CardContent>
+   554→              </Card>
+   555→
+   556→              {/* Step 2: Auth */}
+   557→              <Card className="lg:col-span-1">
+   558→                <CardHeader>
+   559→                  <div className="flex items-center gap-2">
+   560→                    <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
+   561→                      2
+   562→                    </div>
+   563→                    <CardTitle className="text-base">GitHub sign-in</CardTitle>
+   564→                  </div>
+   565→                  <CardDescription>
+   566→                    Personal access token with <code>repo</code> + <code>read:org</code> scopes.
+   567→                  </CardDescription>
+   568→                </CardHeader>
+   569→                <CardContent className="space-y-3">
+   570→                  <div className="space-y-1.5">
+   571→                    <Label htmlFor="token" className="text-xs">Token</Label>
+   572→                    <Input
+   573→                      id="token"
+   574→                      type="password"
+   575→                      placeholder="ghp_…"
+   576→                      value={token}
+   577→                      onChange={(e) => setToken(e.target.value)}
+   578→                      className="font-mono text-sm"
+   579→                    />
+   580→                  </div>
+   581→                  {viewer ? (
+   582→                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
+   583→                      <Avatar className="h-9 w-9">
+   584→                        <AvatarImage src={viewer.avatarUrl} />
+   585→                        <AvatarFallback>{viewer.login[0]?.toUpperCase()}</AvatarFallback>
+   586→                      </Avatar>
+   587→                      <div className="flex-1 min-w-0">
+   588→                        <div className="text-sm font-medium truncate">
+   589→                          {viewer.name || viewer.login}
+   590→                        </div>
+   591→                        <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+   592→                          <CheckCircle2 className="h-3 w-3 text-success" />
+   593→                          Authenticated
+   594→                        </div>
+   595→                      </div>
+   596→                    </div>
+   597→                  ) : (
+   598→                    <Button
+   599→                      onClick={handleAuth}
+   600→                      disabled={authLoading || !token.trim()}
+   601→                      className="w-full"
+   602→                    >
+   603→                      {authLoading ? (
+   604→                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   605→                      ) : (
+   606→                        <KeyRound className="h-4 w-4 mr-2" />
+   607→                      )}
+   608→                      Sign in
+   609→                    </Button>
+   610→                  )}
+   611→                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+   612→                    Token is stored locally in your browser only.{" "}
+   613→                    <a
+   614→                      href="https://github.com/settings/tokens/new?scopes=repo,read:org&description=RepoMosaic"
+   615→                      target="_blank"
+   616→                      rel="noreferrer"
+   617→                      className="underline hover:text-foreground"
+   618→                    >
+   619→                      Create a token →
+   620→                    </a>
+   621→                  </p>
+   622→                </CardContent>
+   623→              </Card>
+   624→
+   625→              {/* Step 3: Org */}
+   626→              <Card className="lg:col-span-1">
+   627→                <CardHeader>
+   628→                  <div className="flex items-center gap-2">
+   629→                    <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground grid place-items-center text-xs font-semibold">
+   630→                      3
+   631→                    </div>
+   632→                    <CardTitle className="text-base">GitHub org / user</CardTitle>
+   633→                  </div>
+   634→                  <CardDescription>
+   635→                    URL or login of the organization you want to analyze.
+   636→                  </CardDescription>
+   637→                </CardHeader>
+   638→                <CardContent className="space-y-3">
+   639→                  <div className="space-y-1.5">
+   640→                    <Label htmlFor="org" className="text-xs">Org URL or username</Label>
+   641→                    <Input
+   642→                      id="org"
+   643→                      placeholder="https://github.com/refinedev"
+   644→                      value={orgInput}
+   645→                      onChange={(e) => setOrgInput(e.target.value)}
+   646→                      onKeyDown={(e) => {
+   647→                        if (e.key === "Enter" && viewer) handleLoadOrg();
+   648→                      }}
+   649→                    />
+   650→                  </div>
+   651→                  <Button
+   652→                    onClick={handleLoadOrg}
+   653→                    disabled={orgLoading || !viewer || !orgInput.trim()}
+   654→                    className="w-full"
+   655→                  >
+   656→                    {orgLoading ? (
+   657→                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+   658→                    ) : (
+   659→                      <Search className="h-4 w-4 mr-2" />
+   660→                    )}
+   661→                    Load organization
+   662→                  </Button>
+   663→                  {org ? (
+   664→                    <div className="flex items-start gap-3 p-3 rounded-lg border border-border/60 bg-muted/30">
+   665→                      <Avatar className="h-9 w-9 rounded-md">
+   666→                        <AvatarImage src={org.avatarUrl} />
+   667→                        <AvatarFallback>{org.login[0]?.toUpperCase()}</AvatarFallback>
+   668→                      </Avatar>
+   669→                      <div className="flex-1 min-w-0">
+   670→                        <div className="text-sm font-medium truncate">
+   671→                          {org.name || org.login}
+   672→                        </div>
+   673→                        <div className="text-[11px] text-muted-foreground">
+   674→                          {org.publicRepos} public repos · {org.kind}
+   675→                        </div>
+   676→                        {org.description && (
+   677→                          <div className="text-[11px] mt-1 line-clamp-2 text-foreground/70">
+   678→                            {org.description}
+   679→                          </div>
+   680→                        )}
+   681→                      </div>
+   682→                    </div>
+   683→                  ) : null}
+   684→                </CardContent>
+   685→              </Card>
+   686→            </div>
+   687→          </TabsContent>
+   688→
+   689→          {/* REPOS TAB */}
+   690→          <TabsContent value="repos" className="space-y-4 animate-fade-in-up">
+   691→            <RepoListPanel
+   692→              repos={repos}
+   693→              filteredRepos={filteredRepos}
+   694→              selectedRepos={selectedRepos}
+   695→              toggleRepo={toggleRepo}
+   696→              selectAll={selectAll}
+   697→              deselectAll={deselectAll}
+   698→              repoFilter={repoFilter}
+   699→              setRepoFilter={setRepoFilter}
+   700→              showArchived={showArchived}
+   701→              setShowArchived={setShowArchived}
+   702→              showForks={showForks}
+   703→              setShowForks={setShowForks}
+   704→              branchesByRepo={branchesByRepo}
+   705→              branchMode={branchMode}
+   706→              setBranchMode={(m) => {
+   707→                setBranchMode(m);
+   708→                saveSettings({ defaultBranchMode: m });
+   709→              }}
+   710→              reposLoading={reposLoading}
+   711→              org={org}
+   712→            />
+   713→          </TabsContent>
+   714→
+   715→          {/* SCAN TAB */}
+   716→          <TabsContent value="scan" className="space-y-4 animate-fade-in-up">
+   717→            <ScanProgressPanel
+   718→              scanProgress={scanProgress}
+   719→              scanResult={scanResult}
+   720→              startScan={startScan}
+   721→              selectedCount={selectedRepos.size}
+   722→              branchMode={branchMode}
+   723→              folderLayout={folderLayout}
+   724→              org={org}
+   725→            />
+   726→          </TabsContent>
+   727→
+   728→          {/* CAPABILITY TAB */}
+   729→          <TabsContent value="capability" className="space-y-4 animate-fade-in-up">
+   730→            {scanResult ? (
+   731→              <CapabilityGraph
+   732→                dna={scanResult.capabilityDNA}
+   733→                graph={scanResult.capabilityGraph}
+   734→              />
+   735→            ) : null}
+   736→          </TabsContent>
+   737→
+   738→          {/* PEOPLE TAB */}
+   739→          <TabsContent value="people" className="space-y-4 animate-fade-in-up">
+   740→            {scanResult ? (
+   741→              <SkillGraphView
+   742→                skillMap={scanResult.skillMap}
+   743→                graph={scanResult.skillGraph}
+   744→              />
+   745→            ) : null}
+   746→          </TabsContent>
+   747→        </Tabs>
+   748→
+   749→        {/* Analytics panel - shown when scan result exists */}
+   750→        {scanResult ? (
+   751→          <div className="mt-8">
+   752→            <AnalyticsPanel result={scanResult} folderLayout={folderLayout} />
+   753→          </div>
+   754→        ) : null}
+   755→      </main>
+   756→
+   757→      <footer className="border-t border-border/60 mt-12">
+   758→        <div className="container mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
+   759→          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+   760→            <div className="flex items-center gap-2">
+   761→              <Network className="h-3.5 w-3.5" />
+   762→              <span>RepoMosaic · Org Capability &amp; Skill Intelligence</span>
+   763→            </div>
+   764→            <div className="flex items-center gap-4">
+   765→              <a
+   766→                href="https://github.com/tringflow-blip/RepoMosaic-Pro"
+   767→                target="_blank"
+   768→                rel="noreferrer"
+   769→                className="hover:text-foreground transition-colors"
+   770→              >
+   771→                GitHub
+   772→              </a>
+   773→              <span>v1.0.0</span>
+   774→            </div>
+   775→          </div>
+   776→        </div>
+   777→      </footer>
+   778→    </div>
+   779→  );
+   780→}
+   781→

@@ -1,0 +1,52 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Cache of completed org/user scans so the user doesn't re-scan on refresh.
+model ScanCache {
+  id           String   @id @default(cuid())
+  org          String
+  ownerKind    String   // "org" | "user"
+  branchMode   String   // "main" | "all"
+  model        String
+  provider     String
+  totalRepos   Int
+  totalCommits Int
+  totalChunks  Int
+  totalPeople  Int
+  skillMapJson String   // full AdvancedSkillMap JSON
+  reposJson    String   // selected repos JSON
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([org, ownerKind, branchMode, model, provider])
+}
+
+model ScanJob {
+  id           String   @id @default(cuid())
+  org          String
+  ownerKind    String
+  branchMode   String
+  model        String
+  provider     String
+  status       String   // "pending" | "running" | "completed" | "failed"
+  progress     Int      @default(0)
+  phase        String   @default("init")
+  message      String   @default("")
+  totalRepos   Int      @default(0)
+  doneRepos    Int      @default(0)
+  totalChunks  Int      @default(0)
+  doneChunks   Int      @default(0)
+  resultJson   String?
+  error        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
