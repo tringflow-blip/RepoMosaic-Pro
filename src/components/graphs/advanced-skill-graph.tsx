@@ -22,6 +22,7 @@ import {
   X,
   CheckCircle2,
   Sparkles,
+  Layers,
 } from "lucide-react";
 import { ForceGraph } from "./force-graph";
 import { cn } from "@/lib/utils";
@@ -38,6 +39,10 @@ type Props = {
    *  navigation (e.g. clicking a People-table row). Pass a string that
    *  changes each time you want to focus — e.g. `${login}:${Date.now()}`. */
   focusRequest?: string;
+  /** When this changes, the graph enters compare mode with the two specified
+   *  people pre-selected. Format: `${loginA}|${loginB}:${timestamp}`.
+   *  Used by the Person Similarity Matrix cell-click handler. */
+  compareRequest?: string;
 };
 
 const DIMENSIONS: { key: SkillDimension; label: string; icon: typeof Compass; color: string }[] = [
@@ -48,7 +53,7 @@ const DIMENSIONS: { key: SkillDimension; label: string; icon: typeof Compass; co
   { key: "role", label: "Roles", icon: Shield, color: "text-role" },
 ];
 
-export function AdvancedSkillGraph({ skillMap, focusRequest }: Props) {
+export function AdvancedSkillGraph({ skillMap, focusRequest, compareRequest }: Props) {
   const [dimension, setDimension] = useState<SkillDimension>("sector");
   const [search, setSearch] = useState("");
   const [selectedLogin, setSelectedLogin] = useState<string | null>(null);
@@ -60,6 +65,10 @@ export function AdvancedSkillGraph({ skillMap, focusRequest }: Props) {
   // focusRequest on first mount (e.g. user clicked a People-table row to navigate
   // here), the if-block below fires and selects that person.
   const [prevFocusRequest, setPrevFocusRequest] = useState("");
+  // Same pattern for compareRequest — when it changes, enter compare mode with
+  // the two specified people pre-selected (used by the Person Similarity Matrix
+  // cell-click handler in the Analytics tab).
+  const [prevCompareRequest, setPrevCompareRequest] = useState("");
 
   // Cross-tab focus: when focusRequest changes, switch selected person.
   // This runs during render (not in an effect) to avoid cascading renders.
@@ -71,6 +80,26 @@ export function AdvancedSkillGraph({ skillMap, focusRequest }: Props) {
         if (compareMode) setCompareMode(false);
         setCompareLogins([]);
         setSelectedLogin(login);
+      }
+    }
+  }
+
+  // Cross-tab compare: when compareRequest changes, enter compare mode with
+  // the two specified people pre-selected.
+  if ((compareRequest ?? "") !== prevCompareRequest) {
+    setPrevCompareRequest(compareRequest ?? "");
+    if (compareRequest) {
+      // Format: "loginA|loginB:timestamp"
+      const pairPart = compareRequest.split(":")[0];
+      const [a, b] = pairPart.split("|");
+      if (
+        a && b &&
+        skillMap.people.some((p) => p.login === a) &&
+        skillMap.people.some((p) => p.login === b)
+      ) {
+        setSelectedLogin(null);
+        setCompareMode(true);
+        setCompareLogins([a, b]);
       }
     }
   }
@@ -188,6 +217,40 @@ export function AdvancedSkillGraph({ skillMap, focusRequest }: Props) {
 
       <div className="grid gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3 space-y-4">
+          {/* Sticky mini-stats bar — at-a-glance scan totals, stays visible while scrolling */}
+          <div className="sticky top-0 z-20 -mx-1 px-1 py-1.5 rounded-lg bg-background/80 backdrop-blur-md border-b border-border/40">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
+              <span className="font-mono font-semibold text-people inline-flex items-center gap-1">
+                <Users className="h-3 w-3" />
+                {skillMap.people.length} people
+              </span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="font-mono tabular-nums text-muted-foreground inline-flex items-center gap-1">
+                <GitCommitVertical className="h-3 w-3" />
+                {skillMap.totalCommits} commits
+              </span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="font-mono tabular-nums text-muted-foreground inline-flex items-center gap-1">
+                <Layers className="h-3 w-3" />
+                {skillMap.totalChunks} chunks
+              </span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="font-mono tabular-nums text-muted-foreground">{skillMap.totalRepos} repos</span>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="font-mono text-[10px] text-primary/80 inline-flex items-center gap-1">
+                <Sparkles className="h-3 w-3" />
+                {skillMap.model}
+              </span>
+              <span className="ml-auto text-[10px] text-muted-foreground/70 italic hidden sm:inline">
+                {compareMode
+                  ? `Compare mode · ${compareLogins.length}/2 selected`
+                  : selectedPerson
+                    ? `Inspecting ${selectedPerson.name || selectedPerson.login}`
+                    : "Click a node or row to inspect"}
+              </span>
+            </div>
+          </div>
+
           <Card>
             <CardHeader>
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -535,12 +598,12 @@ function PersonRow({
     <button
       onClick={onClick}
       className={cn(
-        "w-full flex items-center gap-3 p-2 rounded-lg border transition-all text-left",
+        "w-full flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left",
         selected
           ? compareMode
-            ? "border-primary/40 bg-primary/10 shadow-soft"
-            : "border-people/40 bg-accent/50 shadow-soft"
-          : "border-transparent hover:border-border/60 hover:bg-muted/40"
+            ? "border-primary/50 bg-primary/10 shadow-soft"
+            : "border-people/50 bg-accent/60 shadow-soft"
+          : "border-transparent hover:border-border/60 hover:bg-muted/50"
       )}
     >
       {compareMode && (
@@ -551,28 +614,31 @@ function PersonRow({
           {selected && <CheckCircle2 className="h-3 w-3" />}
         </div>
       )}
-      <Avatar className="h-8 w-8">
+      <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
         <AvatarImage src={person.avatarUrl} />
-        <AvatarFallback>{person.login[0]?.toUpperCase()}</AvatarFallback>
+        <AvatarFallback className="text-[11px]">{person.login[0]?.toUpperCase()}</AvatarFallback>
       </Avatar>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium truncate">{person.name || person.login}</div>
-        <div className="text-[11px] text-muted-foreground flex items-center gap-2">
-          <span>@{person.login}</span>
-          <span>·</span>
-          <span className="flex items-center gap-0.5">
+        <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+          <span className="truncate">@{person.login}</span>
+          <span className="opacity-40">·</span>
+          <span className="inline-flex items-center gap-0.5 shrink-0">
             <GitCommitVertical className="h-3 w-3" />
-            {person.totalCommits}
+            <span className="font-mono tabular-nums">{person.totalCommits}</span>
           </span>
-          <span>·</span>
-          <span className="flex items-center gap-0.5">
+          <span className="opacity-40">·</span>
+          <span className="inline-flex items-center gap-0.5 shrink-0">
             <FolderGit2 className="h-3 w-3" />
-            {person.repos.length}
+            <span className="font-mono tabular-nums">{person.repos.length}</span>
           </span>
         </div>
       </div>
       {person.sectors[0] && (
-        <Badge variant="outline" className="text-[10px] font-mono border-sector/30 text-sector">
+        <Badge
+          variant="outline"
+          className="text-[10px] font-mono border-sector/40 bg-sector/10 text-sector shrink-0"
+        >
           {person.sectors[0].name}
         </Badge>
       )}

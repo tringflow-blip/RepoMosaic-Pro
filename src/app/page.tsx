@@ -53,6 +53,11 @@ export default function Home() {
   // causes the AdvancedSkillGraph to select that person. Used by the People
   // table row-click handler.
   const [focusRequest, setFocusRequest] = useState<string>("");
+  // Cross-tab compare-pair request: format "loginA|loginB:timestamp". When
+  // non-empty AND new, AdvancedSkillGraph enters compare mode with the two
+  // specified people pre-selected. Used by the Person Similarity Matrix
+  // cell-click handler in the Analytics tab.
+  const [compareRequest, setCompareRequest] = useState<string>("");
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -365,7 +370,7 @@ export default function Home() {
 
           <TabsContent value="graph">
             {skillMap ? (
-              <AdvancedSkillGraph skillMap={skillMap} focusRequest={focusRequest} />
+              <AdvancedSkillGraph skillMap={skillMap} focusRequest={focusRequest} compareRequest={compareRequest} />
             ) : (
               <EmptyState
                 icon={<Network className="h-6 w-6" />}
@@ -399,7 +404,15 @@ export default function Home() {
 
           <TabsContent value="analytics">
             {skillMap ? (
-              <AnalyticsPanel skillMap={skillMap} />
+              <AnalyticsPanel
+                skillMap={skillMap}
+                onComparePair={(a, b) => {
+                  // Bump the compareRequest with a fresh timestamp so the
+                  // effect re-runs even if the user clicks the same pair twice.
+                  setCompareRequest(`${a}|${b}:${Date.now()}`);
+                  setActiveTab("graph");
+                }}
+              />
             ) : (
               <EmptyState
                 icon={<BarChart3 className="h-6 w-6" />}
@@ -535,23 +548,23 @@ function PeopleTable({
         <table className="w-full text-xs">
           <thead className="bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
             <tr className="text-left">
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[180px]">
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[220px]">
                 Person
               </th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[100px]">
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[110px]">
                 Commits
               </th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px]">
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px]">
                 Chunks
               </th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px]">
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px]">
                 Repos
               </th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-sector">Sectors</th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-problem">Problem Types</th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-tech">Tech</th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-methodology">Methodologies</th>
-              <th className="p-2.5 font-medium text-[10px] uppercase tracking-wide text-role">Roles</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-sector min-w-[160px]">Sectors</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-problem min-w-[180px]">Problem Types</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-tech min-w-[160px]">Tech</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-methodology min-w-[170px]">Methodologies</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-role min-w-[170px]">Roles</th>
             </tr>
           </thead>
           <tbody>
@@ -564,21 +577,21 @@ function PeopleTable({
                   onClick={() => focusPerson(p.login)}
                   title={`Click to inspect ${p.name || p.login} in Skill Graph`}
                 >
-                  <td className="p-2.5">
+                  <td className="p-3">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <Avatar className="h-8 w-8 shrink-0">
+                      <Avatar className="h-9 w-9 shrink-0 ring-1 ring-border/60">
                         <AvatarImage src={p.avatarUrl} />
-                        <AvatarFallback className="text-[10px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                        <AvatarFallback className="text-[11px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
                       </Avatar>
                       <div className="min-w-0">
-                        <div className="font-medium truncate max-w-[140px]" title={p.name || p.login}>
+                        <div className="font-medium truncate max-w-[180px]" title={p.name || p.login}>
                           {p.name || p.login}
                         </div>
                         <div className="text-[10px] text-muted-foreground truncate">@{p.login}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="p-2.5">
+                  <td className="p-3">
                     <div className="font-mono font-semibold tabular-nums">{p.totalCommits}</div>
                     <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden w-[80px]">
                       <div
@@ -587,21 +600,21 @@ function PeopleTable({
                       />
                     </div>
                   </td>
-                  <td className="p-2.5 font-mono tabular-nums text-muted-foreground">{p.totalChunks}</td>
-                  <td className="p-2.5 font-mono tabular-nums text-muted-foreground">{p.repos.length}</td>
-                  <td className="p-2.5">
+                  <td className="p-3 font-mono tabular-nums text-muted-foreground">{p.totalChunks}</td>
+                  <td className="p-3 font-mono tabular-nums text-muted-foreground">{p.repos.length}</td>
+                  <td className="p-3">
                     <SkillChipList items={p.sectors} variant="sector" max={3} />
                   </td>
-                  <td className="p-2.5">
+                  <td className="p-3">
                     <SkillChipList items={p.problemTypes} variant="problem" max={3} />
                   </td>
-                  <td className="p-2.5">
+                  <td className="p-3">
                     <SkillChipList items={p.tech} variant="tech" max={4} />
                   </td>
-                  <td className="p-2.5">
+                  <td className="p-3">
                     <SkillChipList items={p.methodologies} variant="methodology" max={3} />
                   </td>
-                  <td className="p-2.5">
+                  <td className="p-3">
                     <SkillChipList items={p.roles} variant="role" max={3} />
                   </td>
                 </tr>
@@ -637,20 +650,21 @@ function SkillChipList({
   }
   const shown = items.slice(0, max);
   const overflow = items.length - shown.length;
+  // Stronger contrast: opaque text + tinted bg + slightly darker border
   const cls: Record<SkillVariant, string> = {
-    sector: "border-sector/30 text-sector bg-sector/5",
-    problem: "border-problem/30 text-problem bg-problem/5",
-    tech: "border-tech/30 text-tech bg-tech/5",
-    methodology: "border-methodology/30 text-methodology bg-methodology/5",
-    role: "border-role/30 text-role bg-role/5",
+    sector: "border-sector/40 text-sector bg-sector/10",
+    problem: "border-problem/40 text-problem bg-problem/10",
+    tech: "border-tech/40 text-tech bg-tech/10",
+    methodology: "border-methodology/40 text-methodology bg-methodology/10",
+    role: "border-role/40 text-role bg-role/10",
   };
   return (
-    <div className="flex flex-wrap gap-1 max-w-[220px]">
+    <div className="flex flex-wrap gap-1 max-w-[260px]">
       {shown.map((s) => (
         <span
           key={s.name}
           className={cn(
-            "inline-block text-[10px] px-1.5 py-0.5 rounded border font-medium",
+            "inline-block text-[10px] px-1.5 py-0.5 rounded border font-medium leading-tight",
             cls[variant]
           )}
           title={s.name}
@@ -659,7 +673,10 @@ function SkillChipList({
         </span>
       ))}
       {overflow > 0 && (
-        <span className="inline-block text-[10px] px-1.5 py-0.5 rounded border border-border text-muted-foreground font-mono">
+        <span
+          className="inline-block text-[10px] px-1.5 py-0.5 rounded border border-foreground/20 bg-muted text-foreground/80 font-mono font-semibold tabular-nums leading-tight"
+          title={`${overflow} more: ${items.slice(max).map((s) => s.name).join(", ")}`}
+        >
           +{overflow}
         </span>
       )}

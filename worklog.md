@@ -671,3 +671,208 @@ Unresolved / Next-phase recommendations:
   scan ID so users can bookmark or share their analysis.
 - The force graph could support multi-select (e.g. shift-click to add
   to a "focus set" that highlights edges between selected nodes).
+
+---
+Task ID: 7
+Agent: main (cron webDevReview)
+Task: QA assessment + tag-normalization bug fix + 4 new features (Team Skill Radar, Similarity-Matrix cell-click compare, Critical Skill Gap severity tags, sticky Skill Graph mini-stats bar) + styling polish per the 15-min cron review cycle.
+
+## QA Assessment
+- Read /home/z/my-project/worklog.md to understand prior state (Task ID 6
+  had shipped Skill Gap Analysis, Person Similarity Matrix, CSV export,
+  cross-tab navigation, "/" shortcut, pulsing force-graph node).
+- Verified dev server healthy (HTTP 200 on `/`), lint clean.
+- Loaded the cached Gaia-Recipe scan via agent-browser + token auth.
+- Used VLM (z-ai vision CLI) to analyze screenshots of Skill Graph,
+  People, and Analytics tabs.
+- Found 1 real data-quality bug + 3 visual-polish issues:
+  1. **Tag deduplication incomplete**: cached skill map still showed
+     separate "EduTech" / "EduCook" / "EduHealth" / "EduCooking" sector
+     columns in the Skill Coverage Matrix. The existing prefix-merging
+     rule couldn't catch these because their normalized forms
+     ("educook", "eduhealth", "educoking") don't share a ≥4-char prefix.
+  2. People table column widths too narrow (Person, Roles truncating).
+  3. +N overflow chips had low contrast (border-border + muted-foreground).
+  4. Skill Graph Contributors panel rows were slightly cramped (p-2).
+
+## Bug Fixes
+- **Tag normalization — STEM_RULES** (`src/lib/analysis/advanced-skill-map.ts`):
+  Added a new STEM_RULES table that maps any tag whose normalized form
+  starts with a known stem (≥3 chars) to the canonical seed name.
+  Covers: edu → EduTech, health/med → HealthTech, fin/pay → FinTech,
+  commerce/shop/ecomm → E-commerce, devtool → DevTools,
+  media/content/publish → Media/Content, web3/crypto/blockchain →
+  Web3/Crypto, machine/deeplearn → AI/ML, product → Productivity,
+  comm/chat/messag → Communications.
+- **Post-normalization pass for cached data** (`postNormalizeSkillMap`):
+  Wrote a new exported function that re-runs buildCanonicalizer across
+  each dimension on an already-aggregated skill map. Re-aggregates per-
+  person entries and org rollups, summing commits/chunks and averaging
+  scores (weighted by commits). Wired into `GET /api/settings` so old
+  SQLite-cached scans benefit from the new stem rules without requiring
+  a re-scan.
+- **Verified**: `curl /api/settings?...` now returns orgSectors with
+  EduTech=102 (was 66+24+6+6 split across EduTech/EduCook/EduHealth/
+  EduCooking), HealthTech=30, Media/Content=13, Web3/Crypto=8, DevTools=5,
+  Social Media=1, E-commerce=113.
+- **Radar chart score bug** (caught during QA): initial implementation
+  used the dimension index `i` from `dimKeys.forEach(({ key, field }, i)`
+  as the person index when reading `rawByDim[key][i]`, causing every
+  person to show identical scores (S100 · P6 · T2 · M0 · R0). Fixed by
+  using the outer `people.map((p, personIdx) =>` index instead. Verified:
+  jolinajavier02 now correctly shows 100/100/100/100/100 while Yena
+  shows 6/6/7/13/7, BroccoBae 2/2/2/2/2, etc.
+
+## New Features
+
+1. **Team Skill Radar Chart** (`analytics-panel.tsx`):
+   - SVG-based polar radar with 5 axes (Sectors, Problem Types, Tech,
+     Methodology, Roles) overlaid on a 320×320 canvas.
+   - Plots up to 6 people as semi-transparent (fillOpacity 0.12) colored
+     polygons — distinct hue per person via oklch palette (orange, green,
+     blue, magenta, yellow, teal).
+   - Per-axis score = (person's total commits in that dimension) / (max
+     across all people in that dimension) × 100. Rewards both breadth
+     and depth without letting one person's huge commit count squash
+     everyone else to 0.
+   - Concentric grid pentagons at 25/50/75/100% with dashed inner rings.
+   - Vertex dots on each polygon for precise value reading.
+   - Legend on the right with toggleable person rows (click to hide/show
+     a polygon). Each row shows avatar, name, and per-dimension scores
+     (S100 · P100 · T100 · M100 · R100 format).
+   - Hidden rows show "hidden" italic label and dim to 40% opacity.
+   - Verified via VLM: 5 axes labeled, multiple polygons of different
+     sizes, jolinajavier02 (red/orange) dominates, 8/10 visual quality.
+
+2. **Similarity Matrix cell-click → Compare People** (`page.tsx` +
+   `advanced-skill-graph.tsx` + `analytics-panel.tsx`):
+   - Added `compareRequest` state to page.tsx (format
+     `"loginA|loginB:timestamp"`), plumbed as a prop to
+     AdvancedSkillGraph.
+   - AdvancedSkillGraph accepts `compareRequest` and uses the same
+     render-time "previous value tracking" pattern as `focusRequest` to
+     enter compare mode with the two specified people pre-selected
+     (exits single-select mode if active).
+   - PersonSimilarityMatrix accepts `onComparePair(loginA, loginB)` and
+     renders off-diagonal cells as clickable buttons (diagonal stays
+     disabled with "—" and inset ring).
+   - Cell hover title now appends "· click to compare". Bottom hint
+     shows "Click a cell to compare ·" when callback is wired.
+   - Verified end-to-end via agent-browser: clicked the 38% cell
+     (jolinajavier02 vs Yena) → Skill Graph tab opens → Compare mode
+     active → ComparePeopleCard renders both names + per-dimension
+     Jaccard bars.
+
+3. **Critical Skill Gap Severity Tags** (`analytics-panel.tsx`):
+   - SkillGapAnalysisCard now classifies each missing seed into one of
+     three severity buckets:
+       · **Critical** (rose/red): Testing & QA, Security Hardening,
+         Encryption & Crypto, Compliance & Audit, Observability &
+         Monitoring, Authentication & Identity, Authorization & Access
+         Control.
+       · **Important** (amber): CI/CD & Release Engineering, IaC,
+         Architecture, API Design, Release Management, Documentation,
+         Code Review, Mentoring, TDD, DDD, Performance Optimization,
+         Internationalization, Accessibility.
+       · **Nice-to-have** (sky blue): everything else.
+   - Missing seeds are now sorted by severity (critical first) then
+     alphabetically within each bucket.
+   - Each card has a colored dot, the skill name, the severity label
+     (with icon — Flame for critical, AlertTriangle for important, Info
+     for nice), and the human-friendly description.
+   - Severity summary chips at the top show counts (e.g. "Critical · 2
+     Important · 5 Nice-to-have · 1") with matching colors.
+   - Verified via VLM on Gaia-Recipe Roles dimension: 2 Critical
+     (Security Hardening, Testing & QA), 5 Important, 1 Nice-to-have,
+     sorted correctly.
+
+4. **Sticky mini-stats bar on Skill Graph** (`advanced-skill-graph.tsx`):
+   - New sticky `top-0 z-20` strip above the Skill Graph card showing
+     scan totals: people count (people-colored), commits, chunks, repos,
+     model name (primary color).
+   - Right-aligned contextual status: "Compare mode · N/2 selected"
+     when in compare mode, "Inspecting {name}" when a person is
+     selected, "Click a node or row to inspect" otherwise (hidden on
+     mobile via `hidden sm:inline`).
+   - Backdrop-blur-md + 80% opacity background so it stays readable
+     while scrolling over content.
+   - Verified via VLM: bar visible at top with "6 people · 268 commits
+     · 49 chunks · 3 repos · glm" + "Compare mode · 2/2 selected".
+
+## Styling Polish
+
+5. **People table column widths + chip contrast** (`page.tsx`):
+   - Person column min-width 180→220px, Roles/Methodologies min-width
+     170px, Problem Types min-width 180px, Tech min-width 160px.
+   - Cell padding p-2.5 → p-3 for more breathing room.
+   - Avatar size 8→9 (h-9 w-9) with ring-1 ring-border/60 for crispness.
+   - SkillChipList: increased max-w 220→260px, border opacity 30→40%,
+     bg opacity 5→10% for stronger contrast.
+   - +N overflow chip: changed from `border-border text-muted-foreground`
+     to `border-foreground/20 bg-muted text-foreground/80 font-semibold`
+     with a tooltip listing the hidden skill names. Much more visible.
+   - Verified via VLM: 8/10 readability, +N chips more visible, less
+     truncation.
+
+6. **Skill Graph Contributors panel polish** (`advanced-skill-graph.tsx`):
+   - PersonRow padding p-2 → p-2.5, avatar h-8 → h-9 with ring-1
+     ring-border/60.
+   - Sector badge contrast: border-sector/30 → /40, added bg-sector/10
+     (was transparent). Now reads clearly against both light and dark
+     themes.
+   - Stats row separators (`·`) now use opacity-40 for visual hierarchy.
+   - Stat numbers use font-mono tabular-nums for alignment.
+   - Selected state border: /40 → /50 for stronger accent.
+   - Verified via VLM: cleaner row layout, better tag visibility.
+
+## Verification
+- Lint clean (`bun run lint` → no errors).
+- All 4 new features + bug fix verified via agent-browser + VLM on the
+  real Gaia-Recipe cached scan (6 people, 268 commits, 49 chunks):
+  · Team Skill Radar: 5 axes, distinct polygons per person, jolinajavier02
+    dominates, toggleable legend works.
+  · Similarity Matrix cell click → Compare mode: clicked 38% cell,
+    navigated to Skill Graph with jolinajavier02 + Yena pre-selected.
+  · Skill Gap severity: 2 Critical / 5 Important / 1 Nice-to-have,
+    color-coded and sorted correctly.
+  · Sticky mini-stats bar: visible at top with all 5 stats + contextual
+    status message.
+  · Tag dedup: EduTech now correctly absorbs EduCook/EduHealth/EduCooking
+    (102 commits total, was 66+24+6+6 split).
+- Server healthy (HTTP 200 on `/`), no runtime errors after fixes.
+
+Stage Summary:
+- **1 data-quality bug fix**: STEM_RULES-based tag normalization (catches
+  EduCook/EduHealth/EduCooking → EduTech via "edu" stem) + post-normalize
+  pass on cached data so old scans benefit without re-scanning.
+- **1 regression bug fix**: radar chart per-person score indexing (was
+  using dimension index instead of person index — caught and fixed
+  during QA before merging).
+- **4 new features**: Team Skill Radar (SVG polar chart with toggleable
+  legend), Similarity-Matrix cell-click → Compare People (cross-tab
+  compare-request plumbing), Critical Skill Gap severity tags (Critical/
+  Important/Nice-to-have with color coding + sorting + summary chips),
+  sticky mini-stats bar on Skill Graph (backdrop-blur, contextual
+  status).
+- **2 styling polish items**: People table column widths + +N chip
+  contrast + skill chip contrast, Skill Graph Contributors panel row
+  padding + avatar ring + sector badge bg.
+- Lint clean. Server healthy. All features verified via agent-browser +
+  VLM on real Gaia-Recipe scan data.
+
+Unresolved / Next-phase recommendations:
+- The radar chart could show axis tick values (25/50/75/100) for
+  precise reading.
+- The Skill Gap Analysis could let users customize the severity
+  classification (e.g. mark a seed as Critical for their org).
+- Consider adding a "skill trajectory" timeline showing how the team's
+  skill coverage changed over time (requires multiple scans over time).
+- The radar chart could support clicking a person's legend row to
+  navigate to their detail in the Skill Graph tab.
+- Consider adding CSV export of the Analytics tab (leaderboards +
+  matrix + radar scores).
+- The force graph could support multi-select (shift-click to add to a
+  "focus set" highlighting edges between selected nodes).
+- Consider a "skill recommendation" feature that suggests which missing
+  skill the team should prioritize based on the org's current sectors
+  (e.g. an E-commerce org missing "Payments & Billing" is high-priority).

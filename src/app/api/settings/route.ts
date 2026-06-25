@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { pingLLM, type LLMConfig } from "@/lib/llm/skill-extractor";
+import { postNormalizeSkillMap } from "@/lib/analysis/advanced-skill-map";
 
 export const runtime = "nodejs";
 
@@ -26,6 +27,10 @@ export async function GET(req: Request) {
       },
     });
     if (!row) return NextResponse.json({ cached: null });
+    // Post-normalize the cached skill map so old scans (aggregated before the
+    // latest STEM_RULES were added) also benefit from tag deduplication.
+    const rawSkillMap = JSON.parse(row.skillMapJson);
+    const skillMap = postNormalizeSkillMap(rawSkillMap);
     return NextResponse.json({
       cached: {
         org: row.org,
@@ -37,7 +42,7 @@ export async function GET(req: Request) {
         totalCommits: row.totalCommits,
         totalChunks: row.totalChunks,
         totalPeople: row.totalPeople,
-        skillMap: JSON.parse(row.skillMapJson),
+        skillMap,
         repos: JSON.parse(row.reposJson),
         updatedAt: row.updatedAt,
       },

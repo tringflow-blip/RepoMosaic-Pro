@@ -21,6 +21,9 @@ import {
   AlertTriangle,
   Grid3x3,
   ArrowRight,
+  Radar,
+  Flame,
+  Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AdvancedSkillMap, SkillDimension, PersonSkillRecord } from "@/lib/analysis/skill-taxonomy";
@@ -32,9 +35,15 @@ import {
   ROLE_SEEDS,
 } from "@/lib/analysis/skill-taxonomy";
 
-type Props = { skillMap: AdvancedSkillMap };
+type Props = {
+  skillMap: AdvancedSkillMap;
+  /** Called when the user clicks a cell in the Person Similarity Matrix.
+   *  Arguments are the two logins being compared. The parent should switch
+   *  to the Skill Graph tab in compare mode with these two pre-selected. */
+  onComparePair?: (loginA: string, loginB: string) => void;
+};
 
-export function AnalyticsPanel({ skillMap }: Props) {
+export function AnalyticsPanel({ skillMap, onComparePair }: Props) {
   const topPeople = skillMap.people.slice(0, 8);
 
   return (
@@ -112,6 +121,9 @@ export function AnalyticsPanel({ skillMap }: Props) {
         </Card>
       </div>
 
+      {/* Team skill radar chart — overlays all people on 5 axes */}
+      <TeamRadarChart skillMap={skillMap} />
+
       {/* Skill co-occurrence */}
       <SkillCoOccurrenceCard skillMap={skillMap} />
 
@@ -119,7 +131,7 @@ export function AnalyticsPanel({ skillMap }: Props) {
       <SkillCoverageMatrix skillMap={skillMap} />
 
       {/* Person-to-Person similarity matrix */}
-      <PersonSimilarityMatrix skillMap={skillMap} />
+      <PersonSimilarityMatrix skillMap={skillMap} onComparePair={onComparePair} />
 
       {/* Skill gap analysis — what's missing from the team */}
       <SkillGapAnalysisCard skillMap={skillMap} />
@@ -566,8 +578,15 @@ function SkillCoverageMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
 
 /** Person-to-Person similarity matrix — NxN grid of overall Jaccard similarity.
  *  Helps spot skill-cluster overlaps at a glance. Hover a cell to see exact %,
- *  click a cell to highlight that pair. */
-function PersonSimilarityMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
+ *  click an off-diagonal cell to open the Skill Graph in compare mode with
+ *  that pair pre-selected (requires onComparePair). */
+function PersonSimilarityMatrix({
+  skillMap,
+  onComparePair,
+}: {
+  skillMap: AdvancedSkillMap;
+  onComparePair?: (loginA: string, loginB: string) => void;
+}) {
   const people = skillMap.people.slice(0, 10);
   const [hovered, setHovered] = useState<{ i: number; j: number } | null>(null);
 
@@ -646,6 +665,7 @@ function PersonSimilarityMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
                   const v = matrix[i][j];
                   const isDiag = i === j;
                   const isHovered = hovered?.i === i && hovered?.j === j;
+                  const canClick = !isDiag && onComparePair;
                   return (
                     <td
                       key={j}
@@ -654,12 +674,21 @@ function PersonSimilarityMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
                       onMouseLeave={() => setHovered(null)}
                       title={isDiag
                         ? `${p.name || p.login} (self)`
-                        : `${p.name || p.login} vs ${people[j].name || people[j].login}: ${(v.jaccard * 100).toFixed(0)}% (${v.shared}/${v.union} shared)`}
+                        : `${p.name || p.login} vs ${people[j].name || people[j].login}: ${(v.jaccard * 100).toFixed(0)}% (${v.shared}/${v.union} shared)${canClick ? " · click to compare" : ""}`}
                     >
-                      <div
+                      <button
+                        type="button"
+                        disabled={!canClick}
+                        onClick={() => {
+                          if (canClick) onComparePair(p.login, people[j].login);
+                        }}
                         className={cn(
                           "h-9 w-9 rounded flex items-center justify-center text-[10px] font-mono font-semibold tabular-nums transition-all",
-                          isDiag ? "ring-1 ring-inset ring-border" : "cursor-default",
+                          isDiag
+                            ? "ring-1 ring-inset ring-border cursor-default"
+                            : canClick
+                              ? "cursor-pointer hover:ring-2 hover:ring-primary/60 hover:scale-110"
+                              : "cursor-default",
                           isHovered && !isDiag && "ring-2 ring-primary/60 scale-110"
                         )}
                         style={{
@@ -668,7 +697,7 @@ function PersonSimilarityMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
                         }}
                       >
                         {isDiag ? "—" : Math.round(v.jaccard * 100)}
-                      </div>
+                      </button>
                     </td>
                   );
                 })}
@@ -687,7 +716,7 @@ function PersonSimilarityMatrix({ skillMap }: { skillMap: AdvancedSkillMap }) {
             <span>High</span>
           </div>
           <span className="text-[10px] text-muted-foreground/70">·</span>
-          <span>Hover for details · diagonal = self</span>
+          <span>{onComparePair ? "Click a cell to compare · " : ""}Hover for details · diagonal = self</span>
         </div>
       </CardContent>
     </Card>
@@ -752,6 +781,77 @@ function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
     "Security Hardening": "Threat modeling, vuln remediation",
   };
 
+  // Severity classification for missing seeds — helps prioritize hiring/training.
+  // Critical = security/reliability/compliance gaps that pose real risk.
+  // Important = foundational engineering practices the team likely needs.
+  // Nice-to-have = specialized skills that depend on the product direction.
+  const CRITICAL_SEEDS = new Set([
+    "Testing & QA",
+    "Security Hardening",
+    "Encryption & Crypto",
+    "Compliance & Audit",
+    "Observability & Monitoring",
+    "Authentication & Identity",
+    "Authorization & Access Control",
+  ]);
+  const IMPORTANT_SEEDS = new Set([
+    "CI/CD & Release Engineering",
+    "Infrastructure as Code",
+    "Architecture",
+    "API Design",
+    "Release Management",
+    "Documentation",
+    "Code Review",
+    "Mentoring",
+    "Test-Driven Development",
+    "Domain-Driven Design",
+    "Performance Optimization",
+    "Internationalization",
+    "Accessibility",
+  ]);
+  const severityFor = (seed: string): "critical" | "important" | "nice" => {
+    if (CRITICAL_SEEDS.has(seed)) return "critical";
+    if (IMPORTANT_SEEDS.has(seed)) return "important";
+    return "nice";
+  };
+  const severityMeta = {
+    critical: {
+      label: "Critical",
+      icon: <Flame className="h-2.5 w-2.5" />,
+      // red-700 / rose — high contrast
+      className: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+      dot: "bg-rose-500",
+    },
+    important: {
+      label: "Important",
+      icon: <AlertTriangle className="h-2.5 w-2.5" />,
+      className: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+      dot: "bg-amber-500",
+    },
+    nice: {
+      label: "Nice-to-have",
+      icon: <Info className="h-2.5 w-2.5" />,
+      className: "border-sky-500/30 bg-sky-500/5 text-sky-600 dark:text-sky-400",
+      dot: "bg-sky-500",
+    },
+  } as const;
+
+  // Sort missing seeds by severity (critical first, then important, then nice)
+  const sevOrder = { critical: 0, important: 1, nice: 2 } as const;
+  const sortedMissing = [...missing].sort((a, b) => {
+    const sa = severityFor(a);
+    const sb = severityFor(b);
+    if (sevOrder[sa] !== sevOrder[sb]) return sevOrder[sa] - sevOrder[sb];
+    return a.localeCompare(b);
+  });
+
+  // Count by severity
+  const sevCounts = {
+    critical: missing.filter((s) => severityFor(s) === "critical").length,
+    important: missing.filter((s) => severityFor(s) === "important").length,
+    nice: missing.filter((s) => severityFor(s) === "nice").length,
+  };
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -791,26 +891,65 @@ function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
             <div className="text-[11px] mt-1">Every seed {dimLabel.toLowerCase()} appears in at least one commit.</div>
           </div>
         ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {missing.map((s) => (
-              <div
-                key={s}
-                className="group flex items-start gap-2 p-2.5 rounded-md border border-dashed border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
-                style={{ borderStyle: "dashed" }}
-              >
-                <div
-                  className="mt-0.5 h-1.5 w-1.5 rounded-full shrink-0"
-                  style={{ backgroundColor: "var(--amber-500, oklch(0.75 0.18 60))" }}
-                />
-                <div className="min-w-0 flex-1">
-                  <div className="text-xs font-medium truncate" title={s}>{s}</div>
-                  {seedDescription[s] && (
-                    <div className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{seedDescription[s]}</div>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
+          <>
+            {/* Severity legend / summary chips */}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-1">
+                Severity:
+              </span>
+              {(["critical", "important", "nice"] as const).map((sev) => {
+                const m = severityMeta[sev];
+                const count = sevCounts[sev];
+                if (count === 0) return null;
+                return (
+                  <span
+                    key={sev}
+                    className={cn(
+                      "inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium",
+                      m.className
+                    )}
+                  >
+                    {m.icon}
+                    {m.label}
+                    <span className="font-mono tabular-nums opacity-70">· {count}</span>
+                  </span>
+                );
+              })}
+            </div>
+
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {sortedMissing.map((s) => {
+                const sev = severityFor(s);
+                const m = severityMeta[sev];
+                return (
+                  <div
+                    key={s}
+                    className={cn(
+                      "group flex items-start gap-2 p-3 rounded-md border transition-all hover:scale-[1.01]",
+                      m.className
+                    )}
+                    title={`${s} — ${m.label}`}
+                  >
+                    <div
+                      className={cn("mt-1 h-1.5 w-1.5 rounded-full shrink-0", m.dot)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <div className="text-xs font-medium truncate" title={s}>{s}</div>
+                        <span className="inline-flex items-center gap-0.5 text-[9px] uppercase tracking-wide opacity-70 shrink-0">
+                          {m.icon}
+                          {m.label}
+                        </span>
+                      </div>
+                      {seedDescription[s] && (
+                        <div className="text-[10px] opacity-80 mt-1 line-clamp-2">{seedDescription[s]}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         {/* Coverage summary bar */}
@@ -832,6 +971,275 @@ function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
                 backgroundColor: accentVar,
               }}
             />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Team Skill Radar Chart — overlays every person (up to 6) on 5 normalized
+ *  axes (one per skill dimension) so you can see at a glance who covers what.
+ *  Each axis is scaled 0..100 = (person's commit count in that dimension) /
+ *  (max commit count across all people in that dimension) × 100. This rewards
+ *  both breadth (many skills) and depth (many commits) without letting one
+ *  person's huge commit count squash everyone else to 0.
+ *
+ *  Click a person in the legend to toggle their polygon on/off. */
+function TeamRadarChart({ skillMap }: { skillMap: AdvancedSkillMap }) {
+  const people = skillMap.people.slice(0, 6);
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
+
+  // Distinct color per person — uses oklch hue rotation for accessibility
+  const personColors = useMemo(() => {
+    const palette = [
+      "oklch(0.62 0.16 35)",    // orange
+      "oklch(0.62 0.14 145)",   // green
+      "oklch(0.62 0.16 250)",   // blue (avoid as primary; OK for distinct viz)
+      "oklch(0.62 0.16 305)",   // magenta
+      "oklch(0.65 0.13 90)",    // yellow
+      "oklch(0.60 0.13 195)",   // teal
+    ];
+    return new Map(people.map((p, i) => [p.login, palette[i % palette.length]]));
+  }, [people]);
+
+  // Compute per-person score per dimension: total commits across all skills
+  // in that dimension. Then normalize 0..100 against the max across people.
+  const { scores } = useMemo(() => {
+    const dimKeys: { key: SkillDimension; field: "sectors" | "problemTypes" | "tech" | "methodologies" | "roles" }[] = [
+      { key: "sector", field: "sectors" },
+      { key: "problemType", field: "problemTypes" },
+      { key: "tech", field: "tech" },
+      { key: "methodology", field: "methodologies" },
+      { key: "role", field: "roles" },
+    ];
+    const rawByDim: Record<SkillDimension, number[]> = {
+      sector: [],
+      problemType: [],
+      tech: [],
+      methodology: [],
+      role: [],
+    };
+    for (const p of people) {
+      for (const { key, field } of dimKeys) {
+        const sum = p[field].reduce((acc, s) => acc + s.commits, 0);
+        rawByDim[key].push(sum);
+      }
+    }
+    const maxByDim: Record<SkillDimension, number> = {
+      sector: Math.max(1, ...rawByDim.sector),
+      problemType: Math.max(1, ...rawByDim.problemType),
+      tech: Math.max(1, ...rawByDim.tech),
+      methodology: Math.max(1, ...rawByDim.methodology),
+      role: Math.max(1, ...rawByDim.role),
+    };
+    const scores = people.map((p, personIdx) => {
+      const byDim: Record<SkillDimension, number> = {
+        sector: 0, problemType: 0, tech: 0, methodology: 0, role: 0,
+      };
+      dimKeys.forEach(({ key }) => {
+        byDim[key] = Math.round((rawByDim[key][personIdx] / maxByDim[key]) * 100);
+      });
+      return byDim;
+    });
+    return { scores };
+  }, [people]);
+
+  if (people.length < 2) return null;
+
+  // SVG geometry
+  const size = 320;
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = 110; // max radius
+  const dims: { key: SkillDimension; label: string; color: string }[] = [
+    { key: "sector", label: "Sectors", color: "var(--sector)" },
+    { key: "problemType", label: "Problem Types", color: "var(--problem)" },
+    { key: "tech", label: "Tech", color: "var(--tech)" },
+    { key: "methodology", label: "Methodology", color: "var(--methodology)" },
+    { key: "role", label: "Roles", color: "var(--role)" },
+  ];
+  const n = dims.length;
+  const angleFor = (i: number) => (Math.PI * 2 * i) / n - Math.PI / 2; // start at top
+  const pointFor = (i: number, ratio: number) => ({
+    x: cx + Math.cos(angleFor(i)) * r * ratio,
+    y: cy + Math.sin(angleFor(i)) * r * ratio,
+  });
+
+  // Build polygon points for a person
+  const polygonFor = (personScores: Record<SkillDimension, number>) => {
+    return dims.map((d, i) => {
+      const ratio = Math.max(0, Math.min(1, personScores[d.key] / 100));
+      const p = pointFor(i, ratio);
+      return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+    }).join(" ");
+  };
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Radar className="h-4 w-4 text-primary" />
+              Team Skill Radar
+            </CardTitle>
+            <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
+              <TrendingUp className="h-3 w-3" />
+              Per-person coverage across 5 dimensions (0–100 = % of team max) · toggle a person to isolate
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col lg:flex-row items-center gap-6">
+          {/* SVG radar */}
+          <div className="relative shrink-0">
+            <svg
+              width={size}
+              height={size}
+              viewBox={`0 0 ${size} ${size}`}
+              className="max-w-full"
+              role="img"
+              aria-label="Team skill radar chart"
+            >
+              {/* Concentric grid pentagons at 25/50/75/100% */}
+              {[0.25, 0.5, 0.75, 1].map((ratio, idx) => {
+                const pts = dims.map((_, i) => {
+                  const p = pointFor(i, ratio);
+                  return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+                }).join(" ");
+                return (
+                  <polygon
+                    key={idx}
+                    points={pts}
+                    fill="none"
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                    strokeDasharray={ratio === 1 ? "0" : "2 3"}
+                    opacity={0.7}
+                  />
+                );
+              })}
+
+              {/* Axis lines + labels */}
+              {dims.map((d, i) => {
+                const p = pointFor(i, 1);
+                const labelOffset = 18;
+                const lp = pointFor(i, (r + labelOffset) / r);
+                return (
+                  <g key={d.key}>
+                    <line
+                      x1={cx}
+                      y1={cy}
+                      x2={p.x}
+                      y2={p.y}
+                      stroke="var(--border)"
+                      strokeWidth={1}
+                      opacity={0.6}
+                    />
+                    <text
+                      x={lp.x}
+                      y={lp.y}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      className="fill-current text-[10px] font-semibold"
+                      style={{ fill: d.color }}
+                    >
+                      {d.label}
+                    </text>
+                  </g>
+                );
+              })}
+
+              {/* Per-person polygons */}
+              {people.map((p, idx) => {
+                if (hidden.has(p.login)) return null;
+                const color = personColors.get(p.login)!;
+                const points = polygonFor(scores[idx]);
+                return (
+                  <g key={p.login}>
+                    <polygon
+                      points={points}
+                      fill={color}
+                      fillOpacity={0.12}
+                      stroke={color}
+                      strokeWidth={1.8}
+                      strokeLinejoin="round"
+                    />
+                    {/* Vertex dots */}
+                    {dims.map((d, i) => {
+                      const ratio = Math.max(0, Math.min(1, scores[idx][d.key] / 100));
+                      const pt = pointFor(i, ratio);
+                      return (
+                        <circle
+                          key={d.key}
+                          cx={pt.x}
+                          cy={pt.y}
+                          r={2.5}
+                          fill={color}
+                          stroke="var(--background)"
+                          strokeWidth={1}
+                        />
+                      );
+                    })}
+                  </g>
+                );
+              })}
+
+              {/* Center dot */}
+              <circle cx={cx} cy={cy} r={1.5} fill="var(--muted-foreground)" opacity={0.5} />
+            </svg>
+          </div>
+
+          {/* Legend + per-person scores */}
+          <div className="flex-1 w-full space-y-2 max-h-[320px] overflow-y-auto pr-1">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1">
+              People ({people.length})
+            </div>
+            {people.map((p, idx) => {
+              const isHidden = hidden.has(p.login);
+              const color = personColors.get(p.login)!;
+              return (
+                <button
+                  key={p.login}
+                  type="button"
+                  onClick={() => {
+                    setHidden((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(p.login)) next.delete(p.login);
+                      else next.add(p.login);
+                      return next;
+                    });
+                  }}
+                  className={cn(
+                    "w-full flex items-center gap-2 p-2 rounded-md border transition-all text-left",
+                    isHidden ? "opacity-40 border-border/50 bg-transparent" : "border-border/30 bg-muted/30 hover:bg-muted/60"
+                  )}
+                >
+                  <span
+                    className="h-3 w-3 rounded-full shrink-0 ring-2 ring-background"
+                    style={{ backgroundColor: color }}
+                  />
+                  <Avatar className="h-5 w-5 shrink-0">
+                    <AvatarImage src={p.avatarUrl} />
+                    <AvatarFallback className="text-[8px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs font-medium truncate">{p.name || p.login}</div>
+                    <div className="text-[10px] text-muted-foreground font-mono tabular-nums">
+                      S{scores[idx].sector} · P{scores[idx].problemType} · T{scores[idx].tech} · M{scores[idx].methodology} · R{scores[idx].role}
+                    </div>
+                  </div>
+                  {isHidden && (
+                    <span className="text-[9px] text-muted-foreground italic">hidden</span>
+                  )}
+                </button>
+              );
+            })}
+            <div className="pt-2 mt-2 border-t text-[10px] text-muted-foreground/70">
+              Click a person to toggle their polygon. 0–100 = % of team max commits in that dimension.
+            </div>
           </div>
         </div>
       </CardContent>

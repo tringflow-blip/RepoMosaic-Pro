@@ -33,11 +33,16 @@ function newDimAgg(): DimensionAgg {
  *   "HTML" / "Html" / "html5"                            →  "HTML"
  *   "JS" / "JavaScript" / "javascript"                   →  "JavaScript"
  *
- * Strategy: lowercase + strip punctuation/space → compare. If the normalized
- * forms are equal OR one is a prefix of the other (≥4 chars), they merge.
- * The canonical name is the longest variant seen (so "EduTech" beats "EduCook"
- * only if it appeared — otherwise the longest survives). A small alias map
- * handles the most common LLM abbreviations.
+ * Strategy:
+ *   1. lowercase + strip punctuation/space → compare.
+ *   2. ALIASES map handles common LLM abbreviations (js → JavaScript).
+ *   3. STEM_RULES collapses any tag whose normalized form starts with a known
+ *      stem (e.g. "edu" → "EduTech", "fintech" → "FinTech"). This catches the
+ *      GLM's "EduCook"/"EduHealth"/"EduCooking" pattern that prefix-merging
+ *      misses because their normalized forms ("educook", "eduhealth",
+ *      "educoking") don't share a ≥4-char prefix.
+ *   4. If two normalized forms are equal OR one is a prefix of the other
+ *      (≥4 chars), they merge. The canonical name is the longest variant seen.
  */
 const ALIASES: Record<string, string> = {
   js: "JavaScript",
@@ -64,13 +69,66 @@ const ALIASES: Record<string, string> = {
   ai: "AI/ML",
 };
 
+/**
+ * Stem rules: if a normalized tag name STARTS WITH one of these stems, it gets
+ * remapped to the canonical seed name. This handles the GLM's tendency to
+ * invent variations like "EduCook", "EduHealth", "EduCooking" — they all
+ * normalize to "edu..." which should map to "EduTech".
+ *
+ * Stems must be ≥3 chars to avoid false positives. Order matters: longest
+ * stems are checked first.
+ */
+const STEM_RULES: { stem: string; canonical: string }[] = [
+  // Education sector — collapse Edu* variations
+  { stem: "edu", canonical: "EduTech" },
+  // Health sector
+  { stem: "health", canonical: "HealthTech" },
+  { stem: "med", canonical: "HealthTech" },
+  // Finance
+  { stem: "fin", canonical: "FinTech" },
+  { stem: "pay", canonical: "FinTech" },
+  // Commerce
+  { stem: "commerce", canonical: "E-commerce" },
+  { stem: "shop", canonical: "E-commerce" },
+  { stem: "ecomm", canonical: "E-commerce" },
+  // DevTools
+  { stem: "devtool", canonical: "DevTools" },
+  // Media/Content
+  { stem: "media", canonical: "Media/Content" },
+  { stem: "content", canonical: "Media/Content" },
+  { stem: "publish", canonical: "Media/Content" },
+  // Web3
+  { stem: "web3", canonical: "Web3/Crypto" },
+  { stem: "crypto", canonical: "Web3/Crypto" },
+  { stem: "blockchain", canonical: "Web3/Crypto" },
+  // AI/ML
+  { stem: "machine", canonical: "AI/ML" },
+  { stem: "deeplearn", canonical: "AI/ML" },
+  // Productivity
+  { stem: "product", canonical: "Productivity" },
+  // Communications
+  { stem: "comm", canonical: "Communications" },
+  { stem: "chat", canonical: "Communications" },
+  { stem: "messag", canonical: "Communications" },
+];
+
+function applyStemRule(normalizedName: string): string | null {
+  for (const rule of STEM_RULES) {
+    if (normalizedName.startsWith(rule.stem) && normalizedName.length > rule.stem.length) {
+      return rule.canonical;
+    }
+  }
+  return null;
+}
+
 function normalizeKey(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 /** Build a canonical-name resolver for a set of tag names. Tags that normalize
- *  to the same key (or where one is a prefix of the other ≥4 chars) collapse
- *  into one canonical name. Returns a function name → canonical name. */
+ *  to the same key (or where one is a prefix of the other ≥4 chars, or that
+ *  match a STEM_RULE) collapse into one canonical name. Returns a function
+ *  name → canonical name. */
 function buildCanonicalizer(names: string[]): (name: string) => string {
   // Group by alias first
   const aliasCanonical = new Map<string, string>(); // normalized key → canonical
@@ -100,11 +158,39 @@ function buildCanonicalizer(names: string[]): (name: string) => string {
     }
   }
 
+  // STEM_RULES pass: any normalized key that starts with a known stem (e.g.
+  // "edu" for "educook"/"eduhealth"/"educoking") gets remapped to the stem's
+  // canonical seed name. This catches near-duplicates that prefix-merging
+  // misses (because "educook"/"eduhealth" don't share a ≥4-char prefix).
+  // We only apply the stem rule to keys that aren't EXACT matches for a seed
+  // (so "EduTech" itself isn't double-mapped).
+  const exactSeedKeys = new Set<string>();
+  for (const n of names) {
+    const k = normalizeKey(n);
+    for (const rule of STEM_RULES) {
+      if (k === rule.stem || k === normalizeKey(rule.canonical)) {
+        exactSeedKeys.add(k);
+      }
+    }
+  }
+  for (const [key, canon] of Array.from(normCanonical.entries())) {
+    if (exactSeedKeys.has(key)) continue;
+    const stemMatch = applyStemRule(key);
+    if (stemMatch) {
+      // If the stem's canonical name is already present in the resolver,
+      // merge into it; otherwise create a new entry.
+      const stemKey = normalizeKey(stemMatch);
+      if (normCanonical.has(stemKey)) {
+        // Prefer the seed canonical name
+        normCanonical.set(key, normCanonical.get(stemKey)!);
+      } else {
+        normCanonical.set(key, stemMatch);
+      }
+    }
+  }
+
   // Prefix merging: if "edutech" and "educate" both exist as separate keys,
   // and one is a prefix (≥4 chars) of the other, merge into the longer canonical.
-  // This catches "EduCook" / "EduTech" / "EduHealth" → they share "edu" prefix
-  // but are genuinely different. We only merge when ONE is a prefix of the OTHER
-  // (i.e. "react" / "reactjs"), not when they merely share a prefix.
   const keys = Array.from(normCanonical.keys());
   for (const k1 of keys) {
     if (!normCanonical.has(k1)) continue; // may have been merged already
@@ -341,5 +427,84 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
     orgTech: orgRollup(orgTech, "tech"),
     orgMethodologies: orgRollup(orgMethodologies, "methodology"),
     orgRoles: orgRollup(orgRoles, "role"),
+  };
+}
+
+/**
+ * Post-normalize an already-aggregated skill map. Used when loading OLD
+ * cached scans that were aggregated before the latest STEM_RULES were added
+ * — collapses duplicate tags (e.g. "EduTech"/"EduCook"/"EduHealth") that
+ * slipped through the older normalizer.
+ *
+ * Re-runs buildCanonicalizer across each dimension's tag names (collected
+ * from all people + the org rollup), then merges entries that collapse to
+ * the same canonical name (summing commits/chunks, averaging score weighted
+ * by commits).
+ */
+export function postNormalizeSkillMap(map: AdvancedSkillMap): AdvancedSkillMap {
+  const dimKeys: { field: "sectors" | "problemTypes" | "tech" | "methodologies" | "roles"; orgField: "orgSectors" | "orgProblemTypes" | "orgTech" | "orgMethodologies" | "orgRoles" }[] = [
+    { field: "sectors", orgField: "orgSectors" },
+    { field: "problemTypes", orgField: "orgProblemTypes" },
+    { field: "tech", orgField: "orgTech" },
+    { field: "methodologies", orgField: "orgMethodologies" },
+    { field: "roles", orgField: "orgRoles" },
+  ];
+
+  type MergedItem = { name: string; score: number; commits: number; chunks: number };
+  const newPeople: PersonSkillRecord[] = map.people.map((p) => ({ ...p }));
+  const newOrg: Record<string, MergedItem & { people: number }> = {};
+
+  for (const { field, orgField } of dimKeys) {
+    // Collect all tag names across people + org rollup
+    const allNames = new Set<string>();
+    for (const p of map.people) {
+      for (const item of p[field]) allNames.add(item.name);
+    }
+    for (const item of map[orgField]) allNames.add(item.name);
+
+    const canonicalize = buildCanonicalizer(Array.from(allNames));
+
+    // Helper: merge a list of items into canonical-name buckets
+    const mergeItems = (items: MergedItem[]): MergedItem[] => {
+      const buckets = new Map<string, { scoreSum: number; commits: number; chunks: number }>();
+      for (const it of items) {
+        const canon = canonicalize(it.name);
+        const cur = buckets.get(canon) ?? { scoreSum: 0, commits: 0, chunks: 0 };
+        // weighted score: average across chunks weighted by commits
+        cur.scoreSum += it.score * Math.max(1, it.commits);
+        cur.commits += it.commits;
+        cur.chunks += it.chunks;
+        buckets.set(canon, cur);
+      }
+      return Array.from(buckets.entries()).map(([name, v]) => ({
+        name,
+        score: Math.round((v.scoreSum / Math.max(1, v.commits)) * 100) / 100,
+        commits: v.commits,
+        chunks: v.chunks,
+      })).sort((a, b) => b.commits - a.commits || b.score - a.score).slice(0, 30);
+    };
+
+    // Re-aggregate per person
+    for (const p of newPeople) {
+      const merged = mergeItems(p[field]);
+      (p as unknown as Record<string, unknown>)[field] = merged;
+    }
+
+    // Re-aggregate org rollup with people counts
+    const mergedOrg = mergeItems(map[orgField]);
+    newOrg[orgField] = mergedOrg.map((d) => ({
+      ...d,
+      people: newPeople.filter((p) => p[field].some((s) => s.name === d.name)).length,
+    }));
+  }
+
+  return {
+    ...map,
+    people: newPeople,
+    orgSectors: newOrg.orgSectors,
+    orgProblemTypes: newOrg.orgProblemTypes,
+    orgTech: newOrg.orgTech,
+    orgMethodologies: newOrg.orgMethodologies,
+    orgRoles: newOrg.orgRoles,
   };
 }
