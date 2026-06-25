@@ -18,6 +18,7 @@ export type ScanStatus = {
   message: string;
   totalRepos: number;
   doneRepos: number;
+  totalCommitsScanning?: number; // commits discovered so far (across repos, all pages)
   totalChunks: number;
   doneChunks: number;
   result: unknown | null;
@@ -94,13 +95,13 @@ export function ScanProgressPanel({ status }: Props) {
           />
           <Metric
             icon={<GitCommit className="h-3.5 w-3.5" />}
-            label="LLM chunks"
-            value={`${status.doneChunks}/${status.totalChunks}`}
+            label="Commits fetched"
+            value={status.totalCommitsScanning != null ? String(status.totalCommitsScanning) : "—"}
           />
           <Metric
             icon={<Cpu className="h-3.5 w-3.5" />}
-            label="Provider"
-            value={status.provider}
+            label="LLM chunks"
+            value={`${status.doneChunks}/${status.totalChunks}`}
           />
         </div>
 

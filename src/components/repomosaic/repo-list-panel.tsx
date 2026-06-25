@@ -19,8 +19,9 @@ type Props = {
   setSelected: (s: Set<string>) => void;
   branchMode: "main" | "all";
   setBranchMode: (m: "main" | "all") => void;
-  commitsPerRepo: number;
-  setCommitsPerRepo: (n: number) => void;
+  /** 0 = fetch ALL commits (paginated, safety cap 5000 internally). */
+  maxCommitsPerRepo: number;
+  setMaxCommitsPerRepo: (n: number) => void;
   commitsPerChunk: number;
   setCommitsPerChunk: (n: number) => void;
   onStartScan: () => void;
@@ -33,8 +34,8 @@ export function RepoListPanel({
   setSelected,
   branchMode,
   setBranchMode,
-  commitsPerRepo,
-  setCommitsPerRepo,
+  maxCommitsPerRepo,
+  setMaxCommitsPerRepo,
   commitsPerChunk,
   setCommitsPerChunk,
   onStartScan,
@@ -77,8 +78,11 @@ export function RepoListPanel({
           <div>
             <CardTitle>Repositories · {repos.length}</CardTitle>
             <CardDescription className="mt-1">
-              {selected.size} selected · scan will fetch up to {commitsPerRepo} commits per repo,
-              chunked {commitsPerChunk} per LLM call
+              {selected.size} selected · scan will fetch{" "}
+              <span className="font-medium text-foreground">
+                {maxCommitsPerRepo === 0 ? "ALL commits" : `up to ${maxCommitsPerRepo} commits`}
+              </span>{" "}
+              per repo, chunked {commitsPerChunk} per LLM call
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -196,15 +200,40 @@ export function RepoListPanel({
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Commits per repo: {commitsPerRepo}</Label>
+            <Label className="text-xs flex items-center justify-between">
+              <span>Commits per repo</span>
+              <Badge
+                variant={maxCommitsPerRepo === 0 ? "default" : "outline"}
+                className="text-[9px] font-mono py-0"
+              >
+                {maxCommitsPerRepo === 0 ? "ALL" : `≤ ${maxCommitsPerRepo}`}
+              </Badge>
+            </Label>
             <Slider
-              value={[commitsPerRepo]}
-              onValueChange={([v]) => setCommitsPerRepo(v)}
-              min={5}
-              max={100}
-              step={5}
+              value={[maxCommitsPerRepo === 0 ? 510 : maxCommitsPerRepo]}
+              onValueChange={([v]) => setMaxCommitsPerRepo(v >= 510 ? 0 : v)}
+              min={20}
+              max={510}
+              step={10}
               disabled={scanning}
             />
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>20</span>
+              <button
+                type="button"
+                onClick={() => setMaxCommitsPerRepo(0)}
+                disabled={scanning}
+                className={cn(
+                  "px-1.5 py-0.5 rounded border text-[10px] transition-colors",
+                  maxCommitsPerRepo === 0
+                    ? "border-primary/40 bg-primary/10 text-primary font-medium"
+                    : "border-border hover:bg-muted"
+                )}
+              >
+                All commits (paginate every page)
+              </button>
+              <span>500+</span>
+            </div>
           </div>
           <div className="space-y-2">
             <Label className="text-xs">Commits per LLM chunk: {commitsPerChunk}</Label>

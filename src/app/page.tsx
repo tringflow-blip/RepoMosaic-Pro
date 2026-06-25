@@ -39,7 +39,7 @@ export default function Home() {
   const [repos, setRepos] = useState<RepoInfo[]>([]);
   const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
   const [branchMode, setBranchMode] = useState<"main" | "all">("main");
-  const [commitsPerRepo, setCommitsPerRepo] = useState(30);
+  const [maxCommitsPerRepo, setMaxCommitsPerRepo] = useState<number>(0); // 0 = ALL commits
   const [commitsPerChunk, setCommitsPerChunk] = useState(6);
   const [loadingRepos, setLoadingRepos] = useState(false);
 
@@ -124,7 +124,7 @@ export default function Home() {
           selectedRepos: Array.from(selectedRepos),
           branchMode,
           llmConfig: setup.llmConfig,
-          commitsPerRepo,
+          maxCommitsPerRepo,
           commitsPerChunk,
         }),
       });
@@ -136,12 +136,14 @@ export default function Home() {
       setScanId(id);
       toast({
         title: "Scan started",
-        description: `${selectedRepos.size} repos · ${branchMode} · ${setup.llmConfig.provider}`,
+        description: `${selectedRepos.size} repos · ${branchMode} · ${setup.llmConfig.provider} · ${
+          maxCommitsPerRepo === 0 ? "ALL commits" : `≤${maxCommitsPerRepo}/repo`
+        }`,
       });
     } catch (err) {
       toast({ title: "Scan failed to start", description: (err as Error).message, variant: "destructive" });
     }
-  }, [branchMode, commitsPerChunk, commitsPerRepo, selectedRepos, setup, toast]);
+  }, [branchMode, commitsPerChunk, maxCommitsPerRepo, selectedRepos, setup, toast]);
 
   // Poll scan status
   useEffect(() => {
@@ -334,8 +336,8 @@ export default function Home() {
                 setSelected={setSelectedRepos}
                 branchMode={branchMode}
                 setBranchMode={setBranchMode}
-                commitsPerRepo={commitsPerRepo}
-                setCommitsPerRepo={setCommitsPerRepo}
+                maxCommitsPerRepo={maxCommitsPerRepo}
+                setMaxCommitsPerRepo={setMaxCommitsPerRepo}
                 commitsPerChunk={commitsPerChunk}
                 setCommitsPerChunk={setCommitsPerChunk}
                 onStartScan={startScan}

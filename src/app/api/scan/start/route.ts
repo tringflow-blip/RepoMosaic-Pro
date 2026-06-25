@@ -4,7 +4,7 @@ import {
   resolveOwner,
   listOrgRepos,
   listUserRepos,
-  listCommits,
+  listAllCommits,
   getCommitDetail,
   listContributors,
   parseGithubIdentifier,
@@ -36,6 +36,7 @@ type ScanJob = {
   message: string;
   totalRepos: number;
   doneRepos: number;
+  totalCommitsScanning: number; // commits discovered so far (across repos)
   totalChunks: number;
   doneChunks: number;
   result: unknown | null;
@@ -54,13 +55,42 @@ function chunkCommits(commits: CommitInfo[], size: number): CommitInfo[][] {
   return out;
 }
 
+/** Run an async fn over each item with a bounded concurrency window. */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T, index: number) => Promise<R>,
+  onProgress?: (done: number, total: number) => void
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  let done = 0;
+  const workers: Promise<void>[] = [];
+  for (let w = 0; w < Math.min(concurrency, items.length); w++) {
+    workers.push(
+      (async () => {
+        while (true) {
+          const i = next++;
+          if (i >= items.length) break;
+          results[i] = await fn(items[i], i);
+          done++;
+          onProgress?.(done, items.length);
+        }
+      })()
+    );
+  }
+  await Promise.all(workers);
+  return results;
+}
+
 async function runScan(jobId: string, params: {
   token: string;
   owner: string;
   selectedRepos: string[];
   branchMode: "main" | "all";
   llmConfig: LLMConfig;
-  commitsPerRepo: number;
+  /** Hard safety cap on commits per repo. 0 = unlimited (capped at 5000 internally). */
+  maxCommitsPerRepo: number;
   commitsPerChunk: number;
 }) {
   const job = JOBS.get(jobId);
@@ -116,19 +146,36 @@ async function runScan(jobId: string, params: {
           personRepoCommits.get(c.login)!.set(repo.name, (personRepoCommits.get(c.login)!.get(repo.name) ?? 0) + c.contributions);
         }
 
-        // 2. Fetch commits (with file details)
+        // 2. Fetch ALL commits (paginated). The user explicitly asked for all
+        //    commits, "even though it takes time". We paginate through every
+        //    page up to maxCommitsPerRepo (default 0 = use the 5000 safety cap
+        //    inside listAllCommits).
         let commits: CommitInfo[] = [];
         try {
-          const raw = await listCommits(params.token, info.login, repo.name, {
+          job.message = `Fetching all commits for ${repo.name} (${branch})…`;
+          const raw = await listAllCommits(params.token, info.login, repo.name, {
             branch,
-            per_page: params.commitsPerRepo,
+            maxCommits: params.maxCommitsPerRepo || 5_000,
+            perPage: 100,
+            onProgress: (fetched) => {
+              job.totalCommitsScanning += 0; // accumulated below
+              job.message = `Fetching all commits for ${repo.name} (${branch})… ${fetched} so far`;
+            },
           });
-          // Fetch file details for first N
-          const cap = Math.min(raw.length, params.commitsPerRepo, 30);
-          const detailed = await Promise.all(
-            raw.slice(0, cap).map((c) => getCommitDetail(params.token, info.login, repo.name, c.sha).catch(() => c))
+          job.totalCommitsScanning += raw.length;
+          job.message = `Enriching ${raw.length} commits with file diffs for ${repo.name}…`;
+
+          // Fetch file-level details for EVERY commit (bounded concurrency of 8
+          // to be gentle on GitHub's rate limit). Failures fall back to the
+          // metadata-only commit object, so we never lose a commit.
+          commits = await mapWithConcurrency(
+            raw,
+            8,
+            (c) => getCommitDetail(params.token, info.login, repo.name, c.sha).catch(() => c),
+            (done, total) => {
+              job.message = `Enriching commits ${done}/${total} for ${repo.name}…`;
+            }
           );
-          commits = detailed;
         } catch {
           commits = [];
         }
@@ -261,7 +308,8 @@ async function listBranchesSafe(token: string, owner: string, repo: string): Pro
 /** POST /api/scan/start
  *  body: {
  *    token, owner, selectedRepos, branchMode, llmConfig,
- *    commitsPerRepo, commitsPerChunk
+ *    maxCommitsPerRepo (0 = all, capped at 5000 internally),
+ *    commitsPerChunk
  *  }
  */
 export async function POST(req: Request) {
@@ -272,7 +320,7 @@ export async function POST(req: Request) {
       selectedRepos?: string[];
       branchMode?: "main" | "all";
       llmConfig?: LLMConfig;
-      commitsPerRepo?: number;
+      maxCommitsPerRepo?: number;
       commitsPerChunk?: number;
     };
     if (!body.token || !body.owner || !body.llmConfig) {
@@ -296,6 +344,7 @@ export async function POST(req: Request) {
       message: "Queued",
       totalRepos: 0,
       doneRepos: 0,
+      totalCommitsScanning: 0,
       totalChunks: 0,
       doneChunks: 0,
       result: null,
@@ -311,7 +360,7 @@ export async function POST(req: Request) {
       selectedRepos: body.selectedRepos ?? [],
       branchMode: body.branchMode ?? "main",
       llmConfig: body.llmConfig,
-      commitsPerRepo: body.commitsPerRepo ?? 30,
+      maxCommitsPerRepo: body.maxCommitsPerRepo ?? 0,
       commitsPerChunk: body.commitsPerChunk ?? 6,
     }).catch((err) => {
       console.error("Scan crashed:", err);

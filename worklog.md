@@ -59,3 +59,52 @@ Stage Summary:
   being used") = a reusable system prompt + structured-JSON output contract for GLM that
   maps a chunk of commits into multi-dimensional skill tags. This is implemented as
   `src/lib/llm/skill-extractor.ts`.
+
+---
+Task ID: 2
+Agent: main
+Task: Upgrade the scanner to fetch ALL commits per repo (paginate every page) instead of capping at 100, per user request: "I want all the commits, even though it takes time. It's fine."
+
+Work Log:
+- Added `listAllCommits()` to `src/lib/github/client.ts` — paginates through every
+  page of `octokit.rest.repos.listCommits` (per_page=100), with a safety cap of
+  5000 commits per repo (configurable via `maxCommits`). Handles 409/422 (empty
+  repo) gracefully. Calls an `onProgress` callback after each page so the scan
+  panel can show "Fetching all commits for X… N so far".
+- Added a bounded-concurrency `mapWithConcurrency()` helper in
+  `src/app/api/scan/start/route.ts` so we can enrich EVERY commit with file-level
+  diffs (`getCommitDetail`) without hammering GitHub's rate limit — 8 concurrent
+  requests at a time, failures fall back to metadata-only commit.
+- Replaced the `commitsPerRepo` param with `maxCommitsPerRepo` (0 = ALL) across
+  the scan API, the `ScanJob` type (added `totalCommitsScanning` field), and the
+  `ScanStatus` frontend type.
+- Updated `RepoListPanel` UI: replaced the "Commits per repo: 30" slider with a
+  new "Commits per repo" control that has an explicit "All commits (paginate
+  every page)" button + a slider (20 → 500+). When the slider hits 510 it flips
+  to ALL mode (badge shows "ALL"). Default is ALL (0).
+- Updated `ScanProgressPanel` metrics grid: replaced the redundant "Provider"
+  metric (already shown in header badges) with a "Commits fetched" metric that
+  surfaces `totalCommitsScanning` live during the scan.
+- Updated `page.tsx`: state `commitsPerRepo` → `maxCommitsPerRepo` (default 0);
+  scan-start toast now says "ALL commits" when 0.
+- Verified lint clean (`bun run lint` → no errors).
+
+End-to-end verification on https://github.com/Gaia-Recipe (3 repos):
+- Previous run (capped at 30/repo): 48 commits, 12 chunks, 4 people.
+- New run (ALL commits):        268 commits, 49 chunks, 6 people.
+  · 5.6× more commits scanned.
+  · 2 previously-missed committers surfaced (BroccoBae Developer, avdingal).
+  · jolinajavier02 went from 29 → 242 commits, 4 → 7 sectors, 5 → 10 tech.
+- The scan correctly paginated through broccobae's 250-commit history and
+  enriched every one of them with file diffs (bounded concurrency = 8).
+- Scan panel showed live "Commits fetched: 268" metric.
+- Skill Graph, People, and Analytics tabs all render the richer multi-dimensional
+  skill data (sectors, problem types, tech, methodologies, roles) per committer.
+
+Stage Summary:
+- The scanner no longer caps commits at 100. It paginates through every page of
+  the GitHub commits API (safety cap 5000/repo, configurable) and enriches every
+  commit with file-level diffs via bounded-concurrency fetching.
+- The UI exposes an explicit "All commits (paginate every page)" mode (default).
+- Real scan on Gaia-Recipe: 268 commits → 49 GLM-extracted chunks → 6 people
+  with full multi-dimensional skill attribution. Lint clean. Server healthy.

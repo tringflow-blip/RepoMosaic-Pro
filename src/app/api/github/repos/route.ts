@@ -9,8 +9,8 @@ export async function POST(req: Request) {
     if (!token || !owner) {
       return NextResponse.json({ error: "token and owner required" }, { status: 400 });
     }
-    const { kind, info } = await resolveOwner(token, owner);
-    const repos = kind === "org" ? await listOrgRepos(token, owner) : await listUserRepos(token, owner);
+    const { kind, info, parsedOwner } = await resolveOwner(token, owner);
+    const repos = kind === "org" ? await listOrgRepos(token, parsedOwner) : await listUserRepos(token, parsedOwner);
     return NextResponse.json({ kind, info, repos });
   } catch (err) {
     return NextResponse.json({ error: (err as Error).message }, { status: 500 });

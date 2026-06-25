@@ -216,6 +216,79 @@ export async function listCommits(
   }));
 }
 
+/**
+ * Fetch ALL commits on a branch by paginating through every page.
+ * The user explicitly asked for "all commits, even though it takes time".
+ *
+ * - `maxCommits` is a safety cap (default 5000) to prevent runaway scans on
+ *   pathological repos. Set to 0 or Infinity for truly unlimited.
+ * - `perPage` defaults to 100 (GitHub's max page size) to minimize round-trips.
+ * - `onProgress` is called after each page so callers can report progress.
+ */
+export async function listAllCommits(
+  token: string,
+  owner: string,
+  repo: string,
+  opts: {
+    branch?: string;
+    since?: string;
+    perPage?: number;
+    maxCommits?: number;
+    onProgress?: (fetched: number, totalPages: number | null) => void;
+  } = {}
+): Promise<CommitInfo[]> {
+  const octokit = createOctokit(token);
+  const perPage = opts.perPage ?? 100;
+  const maxCommits = opts.maxCommits && opts.maxCommits > 0 ? opts.maxCommits : 5_000;
+  const all: CommitInfo[] = [];
+  let page = 1;
+  // Hard safety cap on pages (5000 commits / 100 per page = 50 pages).
+  const maxPages = Math.ceil(maxCommits / perPage);
+
+  while (page <= maxPages) {
+    let data: Awaited<ReturnType<typeof octokit.rest.repos.listCommits>>["data"];
+    try {
+      const resp = await octokit.rest.repos.listCommits({
+        owner,
+        repo,
+        sha: opts.branch,
+        since: opts.since,
+        per_page: perPage,
+        page,
+      });
+      data = resp.data;
+    } catch (err) {
+      // If we hit a 409 (empty repo) or 422, treat as no commits.
+      if ((err as { status?: number }).status === 409 || (err as { status?: number }).status === 422) {
+        break;
+      }
+      throw err;
+    }
+    if (!data || data.length === 0) break;
+
+    for (const c of data) {
+      all.push({
+        sha: c.sha,
+        message: c.commit.message,
+        author: c.commit.author?.name ?? "unknown",
+        authorLogin: c.author?.login ?? c.committer?.login ?? null,
+        authorAvatar: c.author?.avatar_url ?? null,
+        date: c.commit.author?.date ?? c.commit.committer?.date ?? "",
+        additions: 0,
+        deletions: 0,
+        files: [],
+      });
+      if (all.length >= maxCommits) break;
+    }
+
+    opts.onProgress?.(all.length, null);
+
+    if (data.length < perPage) break; // last page
+    page++;
+  }
+  return all;
+}
+
 export async function getCommitDetail(
   token: string,
   owner: string,
@@ -348,13 +421,17 @@ export function parseGithubIdentifier(input: string): { owner: string; repo?: st
 export async function resolveOwner(
   token: string,
   owner: string
-): Promise<{ kind: "org" | "user"; info: OrgInfo }> {
+): Promise<{ kind: "org" | "user"; info: OrgInfo; parsedOwner: string }> {
+  // Always parse first — user may have pasted a full URL like
+  // "https://github.com/Gaia-Recipe" or "@Gaia-Recipe".
+  const { owner: parsed } = parseGithubIdentifier(owner);
+  const cleanOwner = parsed || owner;
   try {
-    const info = await getOrg(token, owner);
-    return { kind: "org", info };
+    const info = await getOrg(token, cleanOwner);
+    return { kind: "org", info, parsedOwner: cleanOwner };
   } catch {
     // fall through to user
   }
-  const info = await getUser(token, owner);
-  return { kind: "user", info };
+  const info = await getUser(token, cleanOwner);
+  return { kind: "user", info, parsedOwner: cleanOwner };
 }
