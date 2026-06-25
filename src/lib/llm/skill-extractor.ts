@@ -153,7 +153,9 @@ function normaliseTags(raw: unknown): SkillTag[] {
     .filter((t) => t.name && DIMENSIONS.some((d) => d.key === t.dimension));
 }
 
-/** Invoke the LLM (GLM by default, OpenAI-compatible if configured). */
+/** Invoke the LLM (GLM by default, OpenAI-compatible if configured).
+ *  Includes retry with exponential backoff for transient errors (429, 5xx,
+ *  network timeouts) so we don't lose skill data to rate-limiting. */
 async function callLLM(
   config: LLMConfig,
   systemPrompt: string,
@@ -164,7 +166,7 @@ async function callLLM(
       throw new Error("OpenAI-compatible provider requires apiKey + baseURL");
     }
     const model = config.model || "gpt-4o-mini";
-    const resp = await fetch(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
+    const resp = await fetchWithRetry(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -191,26 +193,103 @@ async function callLLM(
     return { content, model, provider: "openai-compatible" };
   }
 
-  // GLM via z-ai-web-dev-sdk (default)
-  const zai = await ZAI.create();
-  const completion = await zai.chat.completions.create({
-    messages: [
-      { role: "assistant", content: systemPrompt },
-      { role: "user", content: userMessage },
-    ],
-    thinking: { type: "disabled" },
-    temperature: 0.2,
-  });
-  const content = completion.choices[0]?.message?.content ?? "";
-  return {
-    content,
-    model: (completion as unknown as { model?: string }).model || "glm",
-    provider: "glm",
-  };
+  // GLM via z-ai-web-dev-sdk (default) — retry on 429/5xx/network errors
+  return callGLMWithRetry(systemPrompt, userMessage);
+}
+
+/** Sleep helper. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** Determine if an error is transient (worth retrying). */
+function isTransient(err: unknown): boolean {
+  const msg = (err as Error)?.message ?? "";
+  if (/429|rate.?limit|too many requests/i.test(msg)) return true;
+  if (/5\d{2}|server error|internal error|bad gateway|service unavailable|gateway timeout/i.test(msg)) return true;
+  if (/ECONNRESET|ETIMEDOUT|ENOTFOUND|fetch failed|network|socket hang up|aborted/i.test(msg)) return true;
+  return false;
+}
+
+/** fetch with retry — for OpenAI-compatible providers. */
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  maxRetries = 4
+): Promise<Response> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const resp = await fetch(url, init);
+      // Retry on 429 and 5xx
+      if (resp.status === 429 || (resp.status >= 500 && resp.status < 600)) {
+        const retryAfter = resp.headers.get("retry-after");
+        const delay = retryAfter
+          ? Math.min(30000, parseInt(retryAfter, 10) * 1000)
+          : Math.min(30000, 800 * 2 ** attempt + Math.random() * 300);
+        if (attempt === maxRetries) return resp;
+        await sleep(delay);
+        continue;
+      }
+      return resp;
+    } catch (err) {
+      lastErr = err;
+      if (isTransient(err) && attempt < maxRetries) {
+        const delay = Math.min(30000, 800 * 2 ** attempt + Math.random() * 300);
+        await sleep(delay);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
+}
+
+/** GLM SDK call with retry — for the default z-ai-web-dev-sdk provider. */
+async function callGLMWithRetry(
+  systemPrompt: string,
+  userMessage: string,
+  maxRetries = 4
+): Promise<{ content: string; model: string; provider: string }> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const zai = await ZAI.create();
+      const completion = await zai.chat.completions.create({
+        messages: [
+          { role: "assistant", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        thinking: { type: "disabled" },
+        temperature: 0.2,
+      });
+      const content = completion.choices[0]?.message?.content ?? "";
+      return {
+        content,
+        model: (completion as unknown as { model?: string }).model || "glm",
+        provider: "glm",
+      };
+    } catch (err) {
+      lastErr = err;
+      if (isTransient(err) && attempt < maxRetries) {
+        // Exponential backoff: ~1s, ~2s, ~4s, ~8s (with jitter)
+        const delay = Math.min(30000, 1000 * 2 ** attempt + Math.random() * 500);
+        console.warn(
+          `[glm-retry] attempt ${attempt + 1}/${maxRetries + 1} failed: ${(err as Error).message.slice(0, 100)} → retrying in ${Math.round(delay)}ms`
+        );
+        await sleep(delay);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr;
 }
 
 /** Analyse a single chunk of commits and return multi-dimensional skill tags.
- *  This is the function the scan orchestrator calls once per chunk. */
+ *  This is the function the scan orchestrator calls once per chunk.
+ *  Returns `failed: true` when the LLM call could not be completed even after
+ *  retries — the caller can use this to track scan quality. */
 export async function extractSkillsForChunk(
   config: LLMConfig,
   chunk: {
@@ -227,25 +306,28 @@ export async function extractSkillsForChunk(
       files: { filename: string; status: string; additions: number; deletions: number; changes: number }[];
     }[];
   }
-): Promise<ChunkSkillExtraction & { model: string; provider: string }> {
+): Promise<ChunkSkillExtraction & { model: string; provider: string; failed: boolean }> {
   const systemPrompt = buildSkillPrompt();
   const userMessage = buildChunkUserMessage(chunk);
 
   let parsed: { summary?: string; primarySector?: string | null; tags?: unknown };
   let model = "glm";
   let provider = "glm";
+  let failed = false;
   try {
     const { content, model: m, provider: p } = await callLLM(config, systemPrompt, userMessage);
     model = m;
     provider = p;
     parsed = extractJSON(content) as typeof parsed;
   } catch (err) {
-    // Fallback: emit a minimal "unknown" tag so we never lose the chunk
+    // All retries exhausted — emit a minimal fallback tag so we never lose
+    // the chunk entirely, but flag it as failed for quality tracking.
+    failed = true;
     parsed = {
-      summary: `Failed to parse LLM response: ${(err as Error).message}`,
+      summary: `LLM analysis failed (after retries): ${(err as Error).message.slice(0, 120)}`,
       primarySector: null,
       tags: [
-        { dimension: "role", name: "Implementation", confidence: 0.3, evidence: ["(LLM parse failed)"] },
+        { dimension: "role", name: "Implementation", confidence: 0.3, evidence: ["(LLM analysis failed — fallback tag)"] },
       ],
     };
   }
@@ -262,6 +344,7 @@ export async function extractSkillsForChunk(
     primarySector: parsed.primarySector ? String(parsed.primarySector) : null,
     model,
     provider,
+    failed,
   };
 }
 

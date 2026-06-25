@@ -39,6 +39,7 @@ type ScanJob = {
   totalCommitsScanning: number; // commits discovered so far (across repos)
   totalChunks: number;
   doneChunks: number;
+  failedChunks: number; // chunks where LLM analysis failed (after retries)
   result: unknown | null;
   error: string | null;
   startedAt: number;
@@ -213,14 +214,23 @@ async function runScan(jobId: string, params: {
                 })),
               });
               extractions.push({ ...ext, commits: chunk.length });
+              if (ext.failed) {
+                job.failedChunks += 1;
+              }
               lastModel = ext.model;
               lastProvider = ext.provider;
             } catch (err) {
-              // Skip failed chunks but keep going
-              console.error(`Chunk ${chunkId} failed:`, (err as Error).message);
+              // extractSkillsForChunk has its own retry + fallback, so this
+              // catch is only for truly unexpected errors (e.g. bad input).
+              console.error(`Chunk ${chunkId} crashed:`, (err as Error).message);
+              job.failedChunks += 1;
             }
             job.doneChunks += 1;
             job.progress = Math.round(((ri + (ci + 1) / chunks.length) / selected.length) * 100);
+            // Small inter-chunk pause to be gentle on the GLM rate limit.
+            // The retry logic handles 429s, but pacing avoids them in the
+            // first place on large scans.
+            await new Promise((r) => setTimeout(r, 150));
           }
         }
       }
@@ -246,7 +256,10 @@ async function runScan(jobId: string, params: {
     job.result = skillMap;
     job.status = "completed";
     job.progress = 100;
-    job.message = `Done — ${selected.length} repos, ${totalCommits} commits, ${extractions.length} chunks, ${skillMap.totalPeople} people`;
+    const okChunks = extractions.length - job.failedChunks;
+    job.message = job.failedChunks > 0
+      ? `Done — ${selected.length} repos, ${totalCommits} commits, ${okChunks}/${extractions.length} chunks OK (${job.failedChunks} failed), ${skillMap.totalPeople} people`
+      : `Done — ${selected.length} repos, ${totalCommits} commits, ${extractions.length} chunks, ${skillMap.totalPeople} people`;
 
     // Persist to DB
     try {
@@ -347,6 +360,7 @@ export async function POST(req: Request) {
       totalCommitsScanning: 0,
       totalChunks: 0,
       doneChunks: 0,
+      failedChunks: 0,
       result: null,
       error: null,
       startedAt: Date.now(),

@@ -107,9 +107,14 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
                 }
               }}
             />
-            <p className="text-[11px] text-muted-foreground mt-2 text-center">
-              Person nodes (cyan) sized by commits · {DIMENSIONS.find((d) => d.key === dimension)?.label} nodes sized by aggregate commit volume · drag to reposition
-            </p>
+            <div className="flex items-center justify-between gap-3 mt-2">
+              <p className="text-[11px] text-muted-foreground">
+                Person nodes (people-colored) sized by commits ·{" "}
+                {DIMENSIONS.find((d) => d.key === dimension)?.label} nodes sized by aggregate commit
+                volume · drag to reposition
+              </p>
+              <DimensionLegend dimension={dimension} />
+            </div>
           </CardContent>
         </Card>
 
@@ -358,5 +363,27 @@ function DimensionLeaderboards({
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+/** Small color legend showing the active dimension's color + the people color. */
+function DimensionLegend({ dimension }: { dimension: SkillDimension }) {
+  const dimMeta = DIMENSIONS.find((d) => d.key === dimension)!;
+  const colorClass =
+    dimension === "sector" ? "bg-sector" :
+    dimension === "problemType" ? "bg-problem" :
+    dimension === "tech" ? "bg-tech" :
+    dimension === "methodology" ? "bg-methodology" : "bg-role";
+  return (
+    <div className="flex items-center gap-3 text-[10px] text-muted-foreground shrink-0">
+      <span className="flex items-center gap-1.5">
+        <span className={cn("h-2.5 w-2.5 rounded-full", colorClass)} />
+        {dimMeta.label}
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="h-2.5 w-2.5 rounded-full bg-people" />
+        Person
+      </span>
+    </div>
   );
 }

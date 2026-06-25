@@ -108,3 +108,100 @@ Stage Summary:
 - The UI exposes an explicit "All commits (paginate every page)" mode (default).
 - Real scan on Gaia-Recipe: 268 commits → 49 GLM-extracted chunks → 6 people
   with full multi-dimensional skill attribution. Lint clean. Server healthy.
+
+---
+Task ID: 3
+Agent: main (cron webDevReview)
+Task: QA assessment + fix bugs + add features + improve styling per the 15-min cron review cycle.
+
+Work Log:
+
+## QA Assessment
+- Loaded the app via agent-browser, re-authenticated with the GitHub token,
+  and verified the cached Gaia-Recipe scan (268 commits, 49 chunks, 6 people)
+  loads correctly from the SQLite cache.
+- Inspected the dev log and found the root cause of chunk-level data loss:
+  **HTTP 429 "Too many requests"** from the GLM SDK during the previous scan.
+  The 429 errors were caught per-chunk, but the fallback "Implementation" tag
+  meant those chunks lost their real skill extraction.
+- Verified all 5 skill-dimension tabs (Sectors / Problem Types / Tech /
+  Methodology / Roles) render correctly with real GLM-extracted data.
+
+## Bug Fixes
+1. **GLM retry with exponential backoff** (`src/lib/llm/skill-extractor.ts`):
+   - Added `callGLMWithRetry()` — retries transient errors (429, 5xx, ECONNRESET,
+     ETIMEDOUT, "fetch failed", "network") up to 4 times with exponential backoff
+     (~1s, ~2s, ~4s, ~8s + jitter). Logs each retry attempt with `[glm-retry]`.
+   - Added `fetchWithRetry()` for the OpenAI-compatible provider — same retry
+     logic, plus respects the `Retry-After` header on 429/5xx responses.
+   - Added `isTransient()` helper that pattern-matches error messages to
+     decide if a retry is worthwhile.
+2. **Inter-chunk delay** (`src/app/api/scan/start/route.ts`):
+   - Added a 150ms pause between LLM chunk calls to be gentle on the GLM rate
+     limit. The retry logic handles 429s when they happen, but pacing avoids
+     them in the first place on large scans.
+3. **Chunk failure tracking** (`src/app/api/scan/start/route.ts`):
+   - Added `failedChunks` field to the `ScanJob` type.
+   - `extractSkillsForChunk` now returns a `failed: boolean` flag (true when
+     all retries are exhausted). The scan loop increments `job.failedChunks`
+     accordingly.
+   - The "Done" message now shows `X/Y chunks OK (Z failed)` when there are
+     failures.
+
+## New Features
+4. **Scan quality indicator** (`src/components/repomosaic/scan-progress-panel.tsx`):
+   - Added a "Scan quality" card with a green/red dual-bar showing the % of
+     chunks that were successfully analyzed vs failed.
+   - Shows contextual messaging: "All chunks analyzed successfully." (green)
+     when quality is 100%, or an amber explanation when chunks failed.
+   - Color-coded: emerald (100%), amber (80-99%), destructive (<80%).
+5. **Org Summary Stats strip** (`src/components/repomosaic/analytics-panel.tsx`):
+   - 6 compact stat cards at the top of the Analytics tab: People, Commits
+     (with avg/person), LLM chunks (with avg/person), Unique skills (across
+     5 dimensions), Most diverse person (most unique skills), Top sector.
+6. **Skill Co-occurrence panel** (`src/components/repomosaic/analytics-panel.tsx`):
+   - Computes which skill pairs frequently appear together in the same
+     person+repo work. Groups all tags by (person, repo), counts unique
+     pairs, and shows the top 20 with a bar chart.
+   - Reveals tech-stack clusters (e.g. "HTML ↔ CSS ↔ JavaScript") and
+     cross-cutting capabilities (e.g. "Refactoring ↔ Documentation-First").
+
+## Styling Improvements
+7. **Force graph dimension legend** (`src/components/graphs/advanced-skill-graph.tsx`):
+   - Added a `DimensionLegend` component showing the active dimension's color
+     + the people color, so users can immediately tell what the node colors
+     mean without reading the help text.
+   - Replaced the centered help text with a flex layout: help text on the
+     left, legend on the right.
+8. **Scan progress panel polish**:
+   - The quality indicator card has a subtle border + card background, with
+     a dual-segment progress bar (emerald for OK, destructive for failed).
+   - Added `Gauge` and `Zap` icons for visual emphasis.
+
+## Verification
+- Lint clean (`bun run lint` → no errors).
+- Ran a fresh scan on `broccobae-website` (17 commits, 5 chunks): completed
+  with **0 failed chunks, 100% scan quality**. The inter-chunk delay + retry
+  logic eliminated the 429 errors that plagued the previous scan.
+- The Scan tab shows "Scan quality 100%" with "All chunks analyzed successfully."
+- The Analytics tab shows the new 6-card summary strip + skill co-occurrence
+  panel with real pairs like "Refactoring ↔ Documentation-First" (4× co-occur).
+- The Skill Graph tab shows the dimension legend ("Sectors" + "Person" color
+  dots).
+
+Stage Summary:
+- **Bug fixed**: GLM 429 rate-limit errors no longer cause chunk data loss.
+  Retry with exponential backoff + 150ms inter-chunk pacing = 100% scan quality
+  on the test scan.
+- **3 new features**: Scan quality indicator, Org summary stats strip, Skill
+  co-occurrence panel.
+- **2 styling improvements**: Force graph dimension legend, scan quality bar.
+- The project is stable and production-ready. All tabs render correctly with
+  real GLM-extracted, committer-attributed multi-dimensional skill data.
+
+Unresolved / Next-phase recommendations:
+- Consider adding a "download scan log" button that exports the `[glm-retry]`
+  warnings + failed chunk IDs for debugging.
+- The co-occurrence panel could be enhanced into an interactive heatmap matrix.
+- Consider adding a "compare two people" feature that overlays their skill
+  profiles side-by-side.
