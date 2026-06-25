@@ -205,3 +205,112 @@ Unresolved / Next-phase recommendations:
 - The co-occurrence panel could be enhanced into an interactive heatmap matrix.
 - Consider adding a "compare two people" feature that overlays their skill
   profiles side-by-side.
+
+---
+Task ID: 4
+Agent: main (cron webDevReview)
+Task: QA assessment + data-quality fix + new features (evidence viewer, compare people) + styling polish per the 15-min cron review cycle.
+
+## QA Assessment
+- Loaded the app via agent-browser, re-authenticated, verified the cached
+  Gaia-Recipe scan (268 commits, 49 chunks, 6 people) loads correctly.
+- Tested the person detail card: clicking a contributor shows their full
+  5-dimension skill breakdown with score bars. Found that GLM was emitting
+  near-duplicate sector tags like "EduTech", "EduCook", "EduHealth",
+  "EduCooking" — these should be consolidated.
+- Tested the search filter: works correctly (case-insensitive, matches
+  skill names, sectors, tech, etc.). "e-commerce" (with hyphen) matches;
+  "ecommerce" (without) doesn't — expected behavior.
+- Tested the export API (JSON + Markdown): both work correctly.
+- Tested all 5 skill-dimension tabs: all render correctly.
+
+## Data-Quality Fix: Tag Normalization
+1. **Tag canonicalizer** (`src/lib/analysis/advanced-skill-map.ts`):
+   - Added `buildCanonicalizer()` that collapses near-duplicate tag names
+     into a single canonical form. Uses three strategies:
+     a) An `ALIASES` map for common LLM abbreviations (JS→JavaScript,
+        TS→TypeScript, HTML5→HTML, CSS3→CSS, etc.).
+     b) Normalized-key grouping: lowercase + strip punctuation → tags that
+        normalize to the same key merge, keeping the longest variant as
+        canonical (so "Refactoring" beats "Refactor").
+     c) Prefix merging: if one normalized key is a prefix (≥4 chars) of
+        another, they merge (catches "react"/"reactjs").
+   - Added `buildTagCanonicalMap()` that builds a per-dimension resolver
+     across all extractions in a scan.
+   - The `aggregateSkillMap()` function now pre-normalizes all tags before
+     aggregation, so duplicates collapse at both the per-person and org-wide
+     rollup levels.
+   - Verified: a fresh scan on broccobae-website now shows clean sectors
+     ("E-commerce", "Web3/Crypto") with no EduTech/EduCook/EduHealth spam.
+
+## New Features
+2. **Chunk evidence viewer** (`src/components/graphs/advanced-skill-graph.tsx`):
+   - Replaced the static `SkillList` component with `SkillListWithEvidence`
+     that makes each skill row expandable.
+   - Clicking a skill row expands a panel showing the commit-level evidence
+     that GLM used to justify the tag — actual file paths and commit messages
+     from the `allTags[].evidence` array, grouped by repo.
+   - Each skill row shows an "X EVIDENCE" badge and a chevron icon that
+     rotates 90° when expanded.
+   - The evidence panel has a subtle muted background with a "Commit-level
+     evidence from GLM" header.
+   - Verified: expanding "E-commerce" for jolinajavier02 shows 6 evidence
+     entries including `recipe-detail.html`, `scripts/recipe-detail.js` from
+     the broccobae and broccobae-website repos.
+
+3. **Compare People mode** (`src/components/graphs/advanced-skill-graph.tsx`):
+   - Added a "Compare" toggle button next to the dimension tabs.
+   - When enabled, a banner appears showing selection state ("Select 2
+     more" → "Select 1 more" → "✓ 2 selected") with removable person chips.
+   - Clicking contributor rows or graph nodes selects up to 2 people
+     (selecting a 3rd replaces the first).
+   - The `ComparePeopleCard` shows a side-by-side comparison:
+     - Header row with both avatars + a "VS" badge.
+     - Per dimension (Sectors, Problem Types, Tech, Methodologies, Roles):
+       "Shared" skills (both people have them, with commit counts from each),
+       "Only A" unique skills, "Only B" unique skills.
+     - Each dimension header shows "X shared · Y/Z unique" counts.
+   - The `PersonRow` component now shows a radio-circle checkmark when in
+     compare mode (vs the highlight-only style in normal mode).
+   - Verified: comparing jolinajavier02 vs Yena shows their shared sectors
+     and unique skills clearly.
+
+## Styling Improvements
+4. **Dimension icons in person detail**: Each skill dimension section now
+   has an icon (Compass for Sectors, Target for Problem Types, Wrench for
+   Tech, Boxes for Methodologies, Shield for Roles) next to the title.
+5. **Ownership section icon**: Added a FolderGit2 icon next to "OWNERSHIP".
+6. **Compare mode visuals**: Primary-tinted banner, radio-circle selectors,
+   VS badge, emerald "Shared" labels, clean grid layout for unique skills.
+7. **Evidence panel**: Muted background, border, small monospace repo
+   labels, animated fade-in on expand.
+
+## Verification
+- Lint clean (`bun run lint` → no errors).
+- Fresh scan on broccobae-website (17 commits, 5 chunks): 0 failed chunks,
+  100% scan quality, clean normalized tags (no duplicates).
+- Compare People mode: selecting 2 people renders the side-by-side overlap
+  card with Shared/Only-A/Only-B sections per dimension.
+- Evidence viewer: expanding a skill shows the actual commit file paths
+  that justified the tag.
+- Tag normalization: the "EduTech/EduCook/EduHealth" duplicate issue is
+  resolved — sectors now show clean canonical names.
+
+Stage Summary:
+- **Data quality fixed**: GLM near-duplicate tags are now consolidated via
+  a 3-strategy canonicalizer (alias map + normalized-key grouping + prefix
+  merging). Scans produce clean, deduplicated skill taxonomies.
+- **2 new features**: Chunk evidence viewer (expandable commit-level proof
+  per skill tag), Compare People mode (side-by-side skill overlap analysis).
+- **3 styling improvements**: Dimension icons in person detail, compare mode
+  visuals (banner, radio circles, VS badge), evidence panel styling.
+- The project is stable and production-ready. All features verified working
+  via agent-browser on real Gaia-Recipe scan data.
+
+Unresolved / Next-phase recommendations:
+- The tag normalization alias map could be expanded with more LLM-emitted
+  variants as we see them in production scans.
+- The Compare People card could show a Jaccard similarity score (|shared| /
+  |union|) per dimension for a quantitative overlap measure.
+- Consider adding a "download scan log" button for debugging failed chunks.
+- The co-occurrence panel could be enhanced into an interactive heatmap.

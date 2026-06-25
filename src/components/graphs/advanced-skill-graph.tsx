@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,6 +17,10 @@ import {
   Target,
   Compass,
   Shield,
+  ChevronRight,
+  GitCompare,
+  X,
+  CheckCircle2,
 } from "lucide-react";
 import { ForceGraph } from "./force-graph";
 import { cn } from "@/lib/utils";
@@ -42,6 +47,8 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
   const [dimension, setDimension] = useState<SkillDimension>("sector");
   const [search, setSearch] = useState("");
   const [selectedLogin, setSelectedLogin] = useState<string | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [compareLogins, setCompareLogins] = useState<string[]>([]);
 
   const graph = useMemo(() => skillMapToGraph(skillMap, dimension), [skillMap, dimension]);
 
@@ -64,35 +71,111 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
     ? skillMap.people.find((p) => p.login === selectedLogin) ?? null
     : null;
 
+  const comparePeople = compareLogins
+    .map((l) => skillMap.people.find((p) => p.login === l))
+    .filter((p): p is PersonSkillRecord => !!p);
+
+  const handlePersonClick = (login: string) => {
+    if (compareMode) {
+      setCompareLogins((prev) =>
+        prev.includes(login)
+          ? prev.filter((l) => l !== login)
+          : prev.length >= 2
+            ? [prev[1], login] // replace first, keep second
+            : [...prev, login]
+      );
+    } else {
+      setSelectedLogin(selectedLogin === login ? null : login);
+    }
+  };
+
   return (
-    <div className="grid gap-6 lg:grid-cols-5">
-      <div className="lg:col-span-3 space-y-4">
-        <Card>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-people" />
-                  Skill Graph — {skillMap.org}
-                </CardTitle>
-                <CardDescription className="mt-1">
-                  {skillMap.people.length} people · {skillMap.totalRepos} repos ·{" "}
-                  {skillMap.totalCommits} commits · {skillMap.totalChunks} LLM chunks ·{" "}
-                  <span className="font-mono text-[10px]">{skillMap.model}</span>
-                </CardDescription>
-              </div>
-              <Tabs value={dimension} onValueChange={(v) => setDimension(v as SkillDimension)}>
-                <TabsList className="h-8">
-                  {DIMENSIONS.map((d) => (
-                    <TabsTrigger key={d.key} value={d.key} className="text-[11px] px-2.5 h-7">
-                      <d.icon className={cn("h-3 w-3 mr-1", d.color)} />
-                      {d.label}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
+    <div className="space-y-4">
+      {/* Compare mode banner */}
+      {compareMode && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="py-3 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-xs">
+              <GitCompare className="h-4 w-4 text-primary" />
+              <span className="font-medium">Compare mode</span>
+              <span className="text-muted-foreground">
+                · Select {comparePeople.length === 0 ? "2" : comparePeople.length === 1 ? "1 more" : "✓ 2 selected"} people from the list
+              </span>
             </div>
-          </CardHeader>
+            <div className="flex items-center gap-2">
+              {comparePeople.map((p) => (
+                <Badge key={p.login} variant="outline" className="text-[10px] gap-1">
+                  <Avatar className="h-3 w-3">
+                    <AvatarImage src={p.avatarUrl} />
+                    <AvatarFallback className="text-[8px]">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  {p.name || p.login}
+                  <button
+                    type="button"
+                    onClick={() => setCompareLogins((prev) => prev.filter((l) => l !== p.login))}
+                    className="ml-0.5 hover:text-destructive"
+                    aria-label={`Remove ${p.login}`}
+                  >
+                    <X className="h-2.5 w-2.5" />
+                  </button>
+                </Badge>
+              ))}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-[11px]"
+                onClick={() => { setCompareMode(false); setCompareLogins([]); }}
+              >
+                Exit compare
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3 space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-people" />
+                    Skill Graph — {skillMap.org}
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    {skillMap.people.length} people · {skillMap.totalRepos} repos ·{" "}
+                    {skillMap.totalCommits} commits · {skillMap.totalChunks} LLM chunks ·{" "}
+                    <span className="font-mono text-[10px]">{skillMap.model}</span>
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={compareMode ? "default" : "outline"}
+                    className="h-7 text-[11px]"
+                    onClick={() => {
+                      setCompareMode(!compareMode);
+                      setCompareLogins([]);
+                      setSelectedLogin(null);
+                    }}
+                  >
+                    <GitCompare className="h-3 w-3 mr-1" />
+                    Compare
+                  </Button>
+                  <Tabs value={dimension} onValueChange={(v) => setDimension(v as SkillDimension)}>
+                    <TabsList className="h-8">
+                      {DIMENSIONS.map((d) => (
+                        <TabsTrigger key={d.key} value={d.key} className="text-[11px] px-2.5 h-7">
+                          <d.icon className={cn("h-3 w-3 mr-1", d.color)} />
+                          {d.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </div>
+            </CardHeader>
           <CardContent>
             <ForceGraph
               nodes={graph.nodes}
@@ -103,15 +186,21 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
               onSelectNode={(id) => {
                 if (id.startsWith("person:")) {
                   const login = id.slice("person:".length);
-                  setSelectedLogin(login);
+                  handlePersonClick(login);
                 }
               }}
             />
             <div className="flex items-center justify-between gap-3 mt-2">
               <p className="text-[11px] text-muted-foreground">
-                Person nodes (people-colored) sized by commits ·{" "}
-                {DIMENSIONS.find((d) => d.key === dimension)?.label} nodes sized by aggregate commit
-                volume · drag to reposition
+                {compareMode
+                  ? "Compare mode: click person nodes to select 2 for side-by-side comparison."
+                  : "Person nodes (people-colored) sized by commits · "}
+                {!compareMode && (
+                  <>
+                    {DIMENSIONS.find((d) => d.key === dimension)?.label} nodes sized by aggregate commit
+                    volume · drag to reposition
+                  </>
+                )}
               </p>
               <DimensionLegend dimension={dimension} />
             </div>
@@ -124,7 +213,14 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
       <div className="lg:col-span-2 space-y-4">
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Contributors</CardTitle>
+            <CardTitle className="text-base flex items-center justify-between">
+              <span>Contributors</span>
+              {compareMode && (
+                <span className="text-[10px] font-normal text-muted-foreground">
+                  {compareLogins.length}/2 selected
+                </span>
+              )}
+            </CardTitle>
             <div className="relative mt-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
@@ -140,8 +236,9 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
               <PersonRow
                 key={p.login}
                 person={p}
-                selected={selectedLogin === p.login}
-                onClick={() => setSelectedLogin(selectedLogin === p.login ? null : p.login)}
+                selected={compareMode ? compareLogins.includes(p.login) : selectedLogin === p.login}
+                onClick={() => handlePersonClick(p.login)}
+                compareMode={compareMode}
               />
             ))}
             {filteredPeople.length === 0 && (
@@ -150,7 +247,19 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
           </CardContent>
         </Card>
 
-        {selectedPerson ? (
+        {compareMode ? (
+          comparePeople.length === 2 ? (
+            <ComparePeopleCard people={comparePeople as [PersonSkillRecord, PersonSkillRecord]} />
+          ) : (
+            <Card className="border-dashed border-primary/30">
+              <CardContent className="pt-6 text-center text-sm text-muted-foreground space-y-2">
+                <GitCompare className="h-6 w-6 mx-auto text-primary/50" />
+                <div>Select {2 - comparePeople.length} more person{comparePeople.length === 1 ? "" : "s"} to compare</div>
+                <div className="text-[11px]">Click contributor rows or graph nodes</div>
+              </CardContent>
+            </Card>
+          )
+        ) : selectedPerson ? (
           <PersonDetailCard person={selectedPerson} />
         ) : (
           <Card className="border-dashed">
@@ -159,8 +268,133 @@ export function AdvancedSkillGraph({ skillMap }: Props) {
             </CardContent>
           </Card>
         )}
+        </div>
       </div>
     </div>
+  );
+}
+
+/** Side-by-side comparison of two people's skill profiles. Shows overlap
+ *  (shared skills) and unique skills per person, per dimension. */
+function ComparePeopleCard({ people }: { people: [PersonSkillRecord, PersonSkillRecord] }) {
+  const [a, b] = people;
+  const dims: { key: "sectors" | "problemTypes" | "tech" | "methodologies" | "roles"; label: string; color: string }[] = [
+    { key: "sectors", label: "Sectors", color: "text-sector" },
+    { key: "problemTypes", label: "Problem Types", color: "text-problem" },
+    { key: "tech", label: "Tech", color: "text-tech" },
+    { key: "methodologies", label: "Methodologies", color: "text-methodology" },
+    { key: "roles", label: "Roles", color: "text-role" },
+  ];
+
+  return (
+    <Card className="animate-fade-in-up">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <GitCompare className="h-4 w-4 text-primary" />
+          Skill Overlap
+        </CardTitle>
+        <CardDescription className="text-[11px]">
+          Shared skills (both people) vs unique skills per person
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4 max-h-[560px] overflow-y-auto pr-1">
+        {/* Header row with both avatars */}
+        <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center pb-2 border-b">
+          <div className="flex items-center gap-2 min-w-0">
+            <Avatar className="h-7 w-7 shrink-0">
+              <AvatarImage src={a.avatarUrl} />
+              <AvatarFallback className="text-[10px]">{a.login[0]?.toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0">
+              <div className="text-xs font-medium truncate">{a.name || a.login}</div>
+              <div className="text-[10px] text-muted-foreground">{a.totalCommits}c · {a.totalChunks} chunks</div>
+            </div>
+          </div>
+          <VsBadge />
+          <div className="flex items-center gap-2 min-w-0 justify-end">
+            <div className="min-w-0 text-right">
+              <div className="text-xs font-medium truncate">{b.name || b.login}</div>
+              <div className="text-[10px] text-muted-foreground">{b.totalCommits}c · {b.totalChunks} chunks</div>
+            </div>
+            <Avatar className="h-7 w-7 shrink-0">
+              <AvatarImage src={b.avatarUrl} />
+              <AvatarFallback className="text-[10px]">{b.login[0]?.toUpperCase()}</AvatarFallback>
+            </Avatar>
+          </div>
+        </div>
+
+        {dims.map((dim) => {
+          const listA = a[dim.key];
+          const listB = b[dim.key];
+          const namesA = new Set(listA.map((s) => s.name));
+          const namesB = new Set(listB.map((s) => s.name));
+          const shared = listA.filter((s) => namesB.has(s.name));
+          const onlyA = listA.filter((s) => !namesB.has(s.name));
+          const onlyB = listB.filter((s) => !namesA.has(s.name));
+          if (shared.length === 0 && onlyA.length === 0 && onlyB.length === 0) return null;
+          return (
+            <div key={dim.key} className="space-y-1.5">
+              <div className={cn("text-[11px] font-medium flex items-center justify-between", dim.color)}>
+                <span>{dim.label}</span>
+                <span className="text-[9px] text-muted-foreground font-normal">
+                  {shared.length} shared · {onlyA.length}/{onlyB.length} unique
+                </span>
+              </div>
+              {shared.length > 0 && (
+                <div className="space-y-0.5">
+                  <div className="text-[9px] uppercase tracking-wide text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-2.5 w-2.5" /> Shared
+                  </div>
+                  {shared.map((s) => (
+                    <div key={s.name} className="flex items-center gap-2 text-[10px]">
+                      <span className="font-medium flex-1 truncate">{s.name}</span>
+                      <span className="text-muted-foreground font-mono">{s.commits}c</span>
+                      <span className="text-muted-foreground/60 font-mono">
+                        {b[dim.key].find((x) => x.name === s.name)?.commits ?? 0}c
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-0.5">
+                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground truncate">
+                    Only {a.name || a.login}
+                  </div>
+                  {onlyA.slice(0, 5).map((s) => (
+                    <div key={s.name} className="text-[10px] truncate" title={s.name}>
+                      <span className="font-medium">{s.name}</span>
+                      <span className="text-muted-foreground ml-1 font-mono">{s.commits}c</span>
+                    </div>
+                  ))}
+                  {onlyA.length === 0 && <div className="text-[9px] text-muted-foreground/60">—</div>}
+                </div>
+                <div className="space-y-0.5">
+                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground truncate text-right">
+                    Only {b.name || b.login}
+                  </div>
+                  {onlyB.slice(0, 5).map((s) => (
+                    <div key={s.name} className="text-[10px] truncate text-right" title={s.name}>
+                      <span className="text-muted-foreground mr-1 font-mono">{s.commits}c</span>
+                      <span className="font-medium">{s.name}</span>
+                    </div>
+                  ))}
+                  {onlyB.length === 0 && <div className="text-[9px] text-muted-foreground/60 text-right">—</div>}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+function VsBadge() {
+  return (
+    <span className="text-[9px] font-mono font-bold text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+      VS
+    </span>
   );
 }
 
@@ -168,10 +402,12 @@ function PersonRow({
   person,
   selected,
   onClick,
+  compareMode = false,
 }: {
   person: PersonSkillRecord;
   selected: boolean;
   onClick: () => void;
+  compareMode?: boolean;
 }) {
   return (
     <button
@@ -179,10 +415,20 @@ function PersonRow({
       className={cn(
         "w-full flex items-center gap-3 p-2 rounded-lg border transition-all text-left",
         selected
-          ? "border-people/40 bg-accent/50 shadow-soft"
+          ? compareMode
+            ? "border-primary/40 bg-primary/10 shadow-soft"
+            : "border-people/40 bg-accent/50 shadow-soft"
           : "border-transparent hover:border-border/60 hover:bg-muted/40"
       )}
     >
+      {compareMode && (
+        <div className={cn(
+          "h-4 w-4 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+          selected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30"
+        )}>
+          {selected && <CheckCircle2 className="h-3 w-3" />}
+        </div>
+      )}
       <Avatar className="h-8 w-8">
         <AvatarImage src={person.avatarUrl} />
         <AvatarFallback>{person.login[0]?.toUpperCase()}</AvatarFallback>
@@ -230,40 +476,58 @@ function PersonDetailCard({ person }: { person: PersonSkillRecord }) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-4 max-h-[520px] overflow-y-auto pr-1">
-        <SkillList
+      <CardContent className="space-y-4 max-h-[560px] overflow-y-auto pr-1">
+        <SkillListWithEvidence
           title="SECTORS"
+          icon={<Compass className="h-3 w-3" />}
           color="text-sector"
           barClass="bg-sector"
           items={person.sectors}
+          allTags={person.allTags}
+          dimension="sector"
         />
-        <SkillList
+        <SkillListWithEvidence
           title="PROBLEM TYPES"
+          icon={<Target className="h-3 w-3" />}
           color="text-problem"
           barClass="bg-problem"
           items={person.problemTypes}
+          allTags={person.allTags}
+          dimension="problemType"
         />
-        <SkillList
+        <SkillListWithEvidence
           title="TECH CAPABILITIES"
+          icon={<Wrench className="h-3 w-3" />}
           color="text-tech"
           barClass="bg-tech"
           items={person.tech}
+          allTags={person.allTags}
+          dimension="tech"
         />
-        <SkillList
+        <SkillListWithEvidence
           title="METHODOLOGIES"
+          icon={<Boxes className="h-3 w-3" />}
           color="text-methodology"
           barClass="bg-methodology"
           items={person.methodologies}
+          allTags={person.allTags}
+          dimension="methodology"
         />
-        <SkillList
+        <SkillListWithEvidence
           title="ROLES"
+          icon={<Shield className="h-3 w-3" />}
           color="text-role"
           barClass="bg-role"
           items={person.roles}
+          allTags={person.allTags}
+          dimension="role"
         />
         {person.ownership.length > 0 && (
           <div>
-            <div className="text-xs font-medium text-muted-foreground mb-2">OWNERSHIP</div>
+            <div className="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1.5">
+              <FolderGit2 className="h-3 w-3" />
+              OWNERSHIP
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {person.ownership.slice(0, 15).map((o) => (
                 <Badge key={o.repo} variant="outline" className="text-[10px] font-mono">
@@ -278,35 +542,89 @@ function PersonDetailCard({ person }: { person: PersonSkillRecord }) {
   );
 }
 
-function SkillList({
+/** Skill list where each row can be expanded to show the commit-level evidence
+ *  that justified the tag. Evidence comes from the `allTags` flat list. */
+function SkillListWithEvidence({
   title,
+  icon,
   color,
   barClass,
   items,
+  allTags,
+  dimension,
 }: {
   title: string;
+  icon: React.ReactNode;
   color: string;
   barClass: string;
   items: { name: string; score: number; commits: number; chunks: number }[];
+  allTags: { dimension: SkillDimension; name: string; evidence: string[]; repo: string; commits: number }[];
+  dimension: SkillDimension;
 }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
   if (items.length === 0) return null;
   return (
     <div>
-      <div className={cn("text-xs font-medium mb-2", color)}>{title}</div>
-      <div className="space-y-1.5">
-        {items.slice(0, 10).map((s) => (
-          <div key={s.name} className="space-y-1">
-            <div className="flex items-center justify-between text-[11px]">
-              <span className="font-medium truncate pr-2">{s.name}</span>
-              <span className="text-muted-foreground font-mono whitespace-nowrap">
-                {(s.score * 100).toFixed(0)}% · {s.commits}c
-              </span>
+      <div className={cn("text-xs font-medium mb-2 flex items-center gap-1.5", color)}>
+        {icon}
+        {title}
+      </div>
+      <div className="space-y-1">
+        {items.slice(0, 10).map((s) => {
+          const isOpen = expanded === s.name;
+          // Find evidence entries for this skill in this dimension
+          const evidenceEntries = allTags
+            .filter((t) => t.dimension === dimension && t.name === s.name)
+            .flatMap((t) => (t.evidence || []).map((e) => ({ evidence: e, repo: t.repo })))
+            .slice(0, 6);
+          return (
+            <div key={s.name} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => setExpanded(isOpen ? null : s.name)}
+                className="w-full flex items-center justify-between text-[11px] group"
+              >
+                <span className="font-medium truncate pr-2 text-left flex items-center gap-1">
+                  {evidenceEntries.length > 0 && (
+                    <ChevronRight
+                      className={cn(
+                        "h-2.5 w-2.5 text-muted-foreground transition-transform shrink-0",
+                        isOpen && "rotate-90"
+                      )}
+                    />
+                  )}
+                  {s.name}
+                </span>
+                <span className="text-muted-foreground font-mono whitespace-nowrap flex items-center gap-1.5">
+                  <span>{(s.score * 100).toFixed(0)}% · {s.commits}c</span>
+                  {evidenceEntries.length > 0 && (
+                    <span className="text-[8px] uppercase tracking-wide text-muted-foreground/60 group-hover:text-muted-foreground">
+                      {evidenceEntries.length} evidence
+                    </span>
+                  )}
+                </span>
+              </button>
+              <div className="h-1 rounded-full bg-muted overflow-hidden">
+                <div className={cn("h-full transition-all", barClass)} style={{ width: `${s.score * 100}%` }} />
+              </div>
+              {isOpen && evidenceEntries.length > 0 && (
+                <div className="mt-1 mb-1.5 p-2 rounded-md bg-muted/40 border border-border/40 space-y-1 animate-fade-in-up">
+                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
+                    <Search className="h-2.5 w-2.5" />
+                    Commit-level evidence from GLM
+                  </div>
+                  {evidenceEntries.map((e, i) => (
+                    <div key={i} className="text-[10px] flex items-start gap-1.5">
+                      <FolderGit2 className="h-2.5 w-2.5 mt-0.5 shrink-0 text-muted-foreground/60" />
+                      <span className="font-mono text-muted-foreground shrink-0">{e.repo}:</span>
+                      <span className="text-foreground/80 break-all">{e.evidence}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            <div className="h-1 rounded-full bg-muted overflow-hidden">
-              <div className={cn("h-full", barClass)} style={{ width: `${s.score * 100}%` }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

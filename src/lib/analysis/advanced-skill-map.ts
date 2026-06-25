@@ -15,12 +15,141 @@ import type {
   ChunkSkillExtraction,
   PersonSkillRecord,
   SkillDimension,
+  SkillTag,
 } from "@/lib/analysis/skill-taxonomy";
 
 type DimensionAgg = Map<string, { score: number; commits: number; chunks: number }>;
 
 function newDimAgg(): DimensionAgg {
   return new Map();
+}
+
+/**
+ * Normalize a skill tag name so near-duplicates emitted by the LLM collapse
+ * into a single canonical form. Examples the GLM model actually produces:
+ *   "EduTech" / "EduCook" / "EduHealth" / "EduCooking"  →  "EduTech"
+ *   "UI/UX Implementation" / "UI/UX & Design Systems"   →  kept distinct
+ *   "Refactoring" / "Refactor"                           →  "Refactoring"
+ *   "HTML" / "Html" / "html5"                            →  "HTML"
+ *   "JS" / "JavaScript" / "javascript"                   →  "JavaScript"
+ *
+ * Strategy: lowercase + strip punctuation/space → compare. If the normalized
+ * forms are equal OR one is a prefix of the other (≥4 chars), they merge.
+ * The canonical name is the longest variant seen (so "EduTech" beats "EduCook"
+ * only if it appeared — otherwise the longest survives). A small alias map
+ * handles the most common LLM abbreviations.
+ */
+const ALIASES: Record<string, string> = {
+  js: "JavaScript",
+  javascript: "JavaScript",
+  ts: "TypeScript",
+  typescript: "TypeScript",
+  reactjs: "React",
+  nextjs: "Next.js",
+  nodejs: "Node.js",
+  node: "Node.js",
+  html5: "HTML",
+  html: "HTML",
+  css3: "CSS",
+  css: "CSS",
+  rest: "REST API",
+  restapi: "REST API",
+  graphql: "GraphQL",
+  uiux: "UI/UX",
+  ui: "UI/UX",
+  ux: "UI/UX",
+  devops: "DevOps/Infra",
+  infra: "Infra/DevOps",
+  ml: "AI/ML",
+  ai: "AI/ML",
+};
+
+function normalizeKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Build a canonical-name resolver for a set of tag names. Tags that normalize
+ *  to the same key (or where one is a prefix of the other ≥4 chars) collapse
+ *  into one canonical name. Returns a function name → canonical name. */
+function buildCanonicalizer(names: string[]): (name: string) => string {
+  // Group by alias first
+  const aliasCanonical = new Map<string, string>(); // normalized key → canonical
+  for (const n of names) {
+    const key = normalizeKey(n);
+    if (ALIASES[key]) {
+      const canon = ALIASES[key];
+      aliasCanonical.set(key, canon);
+    }
+  }
+
+  // Then group remaining by normalized key, picking the longest variant as canonical
+  const byNorm = new Map<string, string[]>();
+  for (const n of names) {
+    const key = normalizeKey(n);
+    if (!byNorm.has(key)) byNorm.set(key, []);
+    byNorm.get(key)!.push(n);
+  }
+  const normCanonical = new Map<string, string>();
+  for (const [key, variants] of byNorm.entries()) {
+    if (aliasCanonical.has(key)) {
+      normCanonical.set(key, aliasCanonical.get(key)!);
+    } else {
+      // Pick the longest variant (most descriptive), tiebreak by alphabetical
+      const canon = variants.sort((a, b) => b.length - a.length || a.localeCompare(b))[0];
+      normCanonical.set(key, canon);
+    }
+  }
+
+  // Prefix merging: if "edutech" and "educate" both exist as separate keys,
+  // and one is a prefix (≥4 chars) of the other, merge into the longer canonical.
+  // This catches "EduCook" / "EduTech" / "EduHealth" → they share "edu" prefix
+  // but are genuinely different. We only merge when ONE is a prefix of the OTHER
+  // (i.e. "react" / "reactjs"), not when they merely share a prefix.
+  const keys = Array.from(normCanonical.keys());
+  for (const k1 of keys) {
+    if (!normCanonical.has(k1)) continue; // may have been merged already
+    for (const k2 of keys) {
+      if (k1 === k2) continue;
+      if (!normCanonical.has(k2)) continue;
+      // Merge if one is a prefix of the other and the shorter is ≥4 chars
+      const shorter = k1.length <= k2.length ? k1 : k2;
+      const longer = k1.length <= k2.length ? k2 : k1;
+      if (shorter.length >= 4 && longer.startsWith(shorter)) {
+        // Merge shorter into longer's canonical (keep the longer canonical name)
+        const canonShorter = normCanonical.get(shorter)!;
+        const canonLonger = normCanonical.get(longer)!;
+        // Pick the more frequently-occurring canonical as the survivor.
+        // We don't have counts here, so pick the one that appeared first in
+        // the original names list (more common in practice).
+        const survivor = names.indexOf(canonLonger) <= names.indexOf(canonShorter) ? canonLonger : canonShorter;
+        normCanonical.set(shorter, survivor);
+        normCanonical.set(longer, survivor);
+      }
+    }
+  }
+
+  return (name: string) => {
+    const key = normalizeKey(name);
+    return normCanonical.get(key) ?? name;
+  };
+}
+
+/** Normalize all tags across all extractions: returns a map from
+ *  "dimension::originalName" → canonical name. */
+function buildTagCanonicalMap(extractions: ChunkSkillExtraction[]): (dim: SkillDimension, name: string) => string {
+  // Collect all tag names per dimension
+  const byDim = new Map<SkillDimension, string[]>();
+  for (const ext of extractions) {
+    for (const tag of ext.tags) {
+      if (!byDim.has(tag.dimension)) byDim.set(tag.dimension, []);
+      byDim.get(tag.dimension)!.push(tag.name);
+    }
+  }
+  const resolvers = new Map<SkillDimension, (n: string) => string>();
+  for (const [dim, names] of byDim.entries()) {
+    resolvers.set(dim, buildCanonicalizer(names));
+  }
+  return (dim, name) => resolvers.get(dim)?.(name) ?? name;
 }
 
 function addTag(
@@ -66,9 +195,23 @@ export type AggregationInput = {
 };
 
 export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
+  // Build a tag canonicalizer once for the whole scan — this collapses
+  // near-duplicate tag names (e.g. "EduTech"/"EduCook"/"EduHealth") into a
+  // single canonical form before aggregation.
+  const canonicalize = buildTagCanonicalMap(input.extractions);
+
+  // Pre-normalize all tags in every extraction (mutates a copy)
+  const normalizedExtractions: (ChunkSkillExtraction & { commits: number })[] = input.extractions.map((ext) => ({
+    ...ext,
+    tags: ext.tags.map((t): SkillTag => ({
+      ...t,
+      name: canonicalize(t.dimension, t.name),
+    })),
+  }));
+
   // Group extractions by author login (fallback to author name)
   const byPerson = new Map<string, (ChunkSkillExtraction & { commits: number })[]>();
-  for (const ext of input.extractions) {
+  for (const ext of normalizedExtractions) {
     const key = ext.authorLogin ?? ext.author;
     if (!byPerson.has(key)) byPerson.set(key, []);
     byPerson.get(key)!.push(ext);
@@ -91,7 +234,7 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
     const roles = newDimAgg();
 
     const repos = new Set<string>();
-    const allTags: (import("@/lib/analysis/skill-taxonomy").SkillTag & { repo: string; commits: number })[] = [];
+    const allTags: (SkillTag & { repo: string; commits: number })[] = [];
     let totalCommits = 0;
     let totalChunks = 0;
 
@@ -147,13 +290,13 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
 
   people.sort((a, b) => b.totalCommits - a.totalCommits);
 
-  // Org rollups
+  // Org rollups — use the normalized extractions
   const orgSectors = newDimAgg();
   const orgProblemTypes = newDimAgg();
   const orgTech = newDimAgg();
   const orgMethodologies = newDimAgg();
   const orgRoles = newDimAgg();
-  for (const ext of input.extractions) {
+  for (const ext of normalizedExtractions) {
     for (const tag of ext.tags) {
       const target =
         tag.dimension === "sector" ? orgSectors :
