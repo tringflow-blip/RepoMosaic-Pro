@@ -152,7 +152,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
           <div>
             <CardTitle className="flex items-center gap-2">
               {done ? (
-                <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                <CheckCircle2 className="h-4 w-4 text-tech" />
               ) : failed ? (
                 <AlertCircle className="h-4 w-4 text-destructive" />
               ) : (
@@ -203,7 +203,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
                   <div
                     className={cn(
                       "h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-bold border-2 transition-colors",
-                      isCompleted && "bg-emerald-500 border-emerald-500 text-white",
+                      isCompleted && "bg-tech border-tech text-white",
                       isCurrent && "bg-primary border-primary text-primary-foreground",
                       isPending && "bg-muted border-muted-foreground/30 text-muted-foreground"
                     )}
@@ -218,7 +218,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
                     className={cn(
                       "text-[9px] leading-tight text-center",
                       isCurrent && "text-primary font-semibold",
-                      isCompleted && "text-emerald-600 font-medium",
+                      isCompleted && "text-tech font-medium",
                       isPending && "text-muted-foreground"
                     )}
                   >
@@ -229,7 +229,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
                   <div
                     className={cn(
                       "h-0.5 flex-1 -mt-4",
-                      idx < currentPhaseIdx ? "bg-emerald-500" : "bg-muted-foreground/20"
+                      idx < currentPhaseIdx ? "bg-tech" : "bg-muted-foreground/20"
                     )}
                   />
                 )}
@@ -274,7 +274,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
                 <Gauge className="h-3.5 w-3.5" />
                 Scan quality
               </span>
-              <span className={cn("font-mono font-semibold", qualityPct === 100 ? "text-emerald-600" : qualityPct >= 80 ? "text-amber-600" : "text-destructive")}>
+              <span className={cn("font-mono font-semibold", qualityPct === 100 ? "text-tech" : qualityPct >= 80 ? "text-sector" : "text-destructive")}>
                 {qualityPct}%
                 <span className="text-muted-foreground font-normal ml-1.5">
                   ({okChunks} ok{hasFailures ? `, ${failedChunks} failed` : ""})
@@ -282,14 +282,14 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
               </span>
             </div>
             <div className="h-1.5 rounded-full bg-muted overflow-hidden flex">
-              <div className="h-full bg-emerald-500" style={{ width: `${qualityPct}%` }} />
+              <div className="h-full bg-tech" style={{ width: `${qualityPct}%` }} />
               {hasFailures && (
                 <div className="h-full bg-destructive/70" style={{ width: `${100 - qualityPct}%` }} />
               )}
             </div>
             {hasFailures && (
               <div className="text-[10px] text-muted-foreground flex items-start gap-1">
-                <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-amber-600" />
+                <AlertCircle className="h-3 w-3 mt-0.5 shrink-0 text-sector" />
                 <span>
                   {failedChunks} chunk{failedChunks === 1 ? "" : "s"} could not be analyzed by the LLM
                   (rate-limit or network errors exhausted retries). Those chunks received a fallback
@@ -298,7 +298,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
               </div>
             )}
             {done && !hasFailures && (
-              <div className="text-[10px] text-emerald-600 flex items-center gap-1">
+              <div className="text-[10px] text-tech flex items-center gap-1">
                 <Zap className="h-3 w-3" />
                 All chunks analyzed successfully.
               </div>
@@ -338,7 +338,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
         )}
 
         {done && (
-          <div className="text-xs text-emerald-600 bg-emerald-500/10 p-2 rounded-lg border border-emerald-500/30">
+          <div className="text-xs text-tech bg-tech/10 p-2 rounded-lg border border-tech/30">
             Scan complete. The skill graph is ready below.
           </div>
         )}
@@ -419,15 +419,15 @@ function LiveChunkLog({ events, running }: { events: ChunkEvent[]; running: bool
           <Terminal className="h-3 w-3" />
           <span>Live LLM analysis log</span>
           {running && (
-            <span className="flex items-center gap-1 ml-2 text-emerald-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="flex items-center gap-1 ml-2" style={{ color: "#40E0D0" }}>
+              <span className="h-1.5 w-1.5 rounded-full animate-pulse" style={{ backgroundColor: "#40E0D0" }} />
               streaming
             </span>
           )}
         </div>
         <div className="flex items-center gap-2 text-[10px] font-mono">
-          <span className="text-emerald-400">{okCount} ok</span>
-          {failCount > 0 && <span className="text-red-400">{failCount} failed</span>}
+          <span style={{ color: "#40E0D0" }}>{okCount} ok</span>
+          {failCount > 0 && <span style={{ color: "#FF0000" }}>{failCount} failed</span>}
           <span className="text-zinc-600">·</span>
           <span className="text-zinc-500">{events.length} total</span>
         </div>
@@ -452,19 +452,19 @@ function LiveChunkLog({ events, running }: { events: ChunkEvent[]; running: bool
               )}
             >
               <span className="text-zinc-600 shrink-0 tabular-nums">{timeStr}</span>
-              <span className={cn("shrink-0 font-bold", isFail ? "text-red-400" : "text-emerald-400")}>
+              <span className="shrink-0 font-bold" style={isFail ? { color: "#FF0000" } : { color: "#40E0D0" }}>
                 {isFail ? "FAIL" : " OK "}
               </span>
-              <span className="text-sky-300 shrink-0 truncate max-w-[120px]">{ev.repo}</span>
+              <span className="shrink-0 truncate max-w-[120px]" style={{ color: "#87CEFA" }}>{ev.repo}</span>
               <span className="text-zinc-600 shrink-0">/</span>
-              <span className="text-amber-300 shrink-0 truncate max-w-[100px]">{ev.author}</span>
+              <span className="shrink-0 truncate max-w-[100px]" style={{ color: "#FFA500" }}>{ev.author}</span>
               <span className="text-zinc-600 shrink-0">→</span>
               {isFail ? (
                 <span className="text-red-300 truncate">{ev.error ?? "unknown error"}</span>
               ) : (
                 <span className="text-zinc-400 flex items-center gap-1">
-                  <Tag className="h-2.5 w-2.5 text-purple-400" />
-                  <span className="text-purple-300 font-semibold">{ev.tags}</span>
+                  <Tag className="h-2.5 w-2.5" style={{ color: "#8A2BE2" }} />
+                  <span className="font-semibold" style={{ color: "#8A2BE2" }}>{ev.tags}</span>
                   <span className="text-zinc-600">tags</span>
                   <span className="text-zinc-700 ml-1">· {ev.provider}/{ev.model}</span>
                 </span>
@@ -475,7 +475,7 @@ function LiveChunkLog({ events, running }: { events: ChunkEvent[]; running: bool
         {running && (
           <div className="flex items-center gap-2 px-1.5 py-0.5 text-zinc-500">
             <span className="text-zinc-600 tabular-nums">…</span>
-            <Loader2 className="h-2.5 w-2.5 animate-spin text-emerald-400" />
+            <Loader2 className="h-2.5 w-2.5 animate-spin" style={{ color: "#40E0D0" }} />
             <span className="text-[10px]">analyzing next chunk…</span>
           </div>
         )}
@@ -488,7 +488,7 @@ function LiveChunkLog({ events, running }: { events: ChunkEvent[]; running: bool
             setAutoScroll(true);
             if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
           }}
-          className="w-full text-center py-1 text-[10px] text-emerald-400 hover:bg-zinc-800/50 transition-colors border-t border-zinc-800"
+          className="w-full text-center py-1 text-[10px] hover:bg-zinc-800/50 transition-colors border-t border-zinc-800" style={{ color: "#40E0D0" }}
         >
           ↓ Jump to latest
         </button>

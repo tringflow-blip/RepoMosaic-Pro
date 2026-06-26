@@ -76,19 +76,26 @@
   --input: oklch(0.94 0.008 75);
   --ring: oklch(0.75 0.10 75);
 
-  /* Dimension semantic colors — warm, distinguishable, never blue/indigo primary */
-  --sector: oklch(0.62 0.13 35);        /* terracotta */
-  --problem: oklch(0.62 0.13 145);      /* teal-green */
-  --tech: oklch(0.55 0.11 250);         /* slate (used sparingly for tech nodes only) */
-  --methodology: oklch(0.62 0.13 305);  /* magenta */
-  --role: oklch(0.68 0.12 90);          /* mustard */
-  --people: oklch(0.55 0.10 200);       /* people cyan-teal */
+  /* Dimension semantic colors — EXACT logo palette (hexagon mosaic logo):
+     Orange  #FFA500  → sector    (top hexagon)
+     Turquoise #40E0D0 → tech      (center hexagon — core dimension)
+     Red     #FF0000  → problem   (right hexagon)
+     Purple  #8A2BE2  → methodology (bottom-right + left hexagons)
+     LightBlue #87CEFA → role      (top-right hexagon)
+     Blue    #0000CD  → people    (bottom-left hexagon)
+     All icons in the app use ONLY these 6 colors. */
+  --sector: #FFA500;
+  --problem: #FF0000;
+  --tech: #40E0D0;
+  --methodology: #8A2BE2;
+  --role: #87CEFA;
+  --people: #0000CD;
 
-  --chart-1: oklch(0.62 0.13 35);
-  --chart-2: oklch(0.62 0.13 145);
-  --chart-3: oklch(0.62 0.13 305);
-  --chart-4: oklch(0.68 0.12 90);
-  --chart-5: oklch(0.55 0.10 200);
+  --chart-1: #FFA500;
+  --chart-2: #FF0000;
+  --chart-3: #8A2BE2;
+  --chart-4: #87CEFA;
+  --chart-5: #0000CD;
 
   --sidebar: oklch(0.97 0.006 75);
   --sidebar-foreground: oklch(0.22 0.012 60);
@@ -126,18 +133,19 @@
   --input: oklch(1 0 0 / 12%);
   --ring: oklch(0.70 0.10 75);
 
-  --sector: oklch(0.68 0.14 35);
-  --problem: oklch(0.68 0.14 145);
-  --tech: oklch(0.62 0.12 250);
-  --methodology: oklch(0.68 0.14 305);
-  --role: oklch(0.74 0.13 90);
-  --people: oklch(0.62 0.11 200);
+  /* Dark mode — same logo hues, slightly brighter for contrast on dark bg */
+  --sector: #FFB733;
+  --problem: #FF3333;
+  --tech: #5CECE0;
+  --methodology: #A040EC;
+  --role: #A0D8FF;
+  --people: #3333E8;
 
-  --chart-1: oklch(0.68 0.14 35);
-  --chart-2: oklch(0.68 0.14 145);
-  --chart-3: oklch(0.68 0.14 305);
-  --chart-4: oklch(0.74 0.13 90);
-  --chart-5: oklch(0.62 0.11 200);
+  --chart-1: #FFB733;
+  --chart-2: #FF3333;
+  --chart-3: #A040EC;
+  --chart-4: #A0D8FF;
+  --chart-5: #3333E8;
 
   --sidebar: oklch(0.21 0.008 60);
   --sidebar-foreground: oklch(0.96 0.005 80);
@@ -191,24 +199,24 @@
   .border-role { border-color: var(--role); }
   .border-people { border-color: var(--people); }
 
-  /* ---- Gradient accent utilities ---- */
+  /* ---- Gradient accent utilities (logo hex colors) ---- */
   .gradient-sector {
-    background: linear-gradient(135deg, oklch(0.62 0.13 35), oklch(0.72 0.10 30));
+    background: linear-gradient(135deg, #FFA500, #FF8C00);
   }
   .gradient-tech {
-    background: linear-gradient(135deg, oklch(0.55 0.11 250), oklch(0.48 0.09 260));
+    background: linear-gradient(135deg, #40E0D0, #20B2AA);
   }
   .gradient-problem {
-    background: linear-gradient(135deg, oklch(0.62 0.13 145), oklch(0.55 0.11 155));
+    background: linear-gradient(135deg, #FF0000, #DC143C);
   }
   .gradient-methodology {
-    background: linear-gradient(135deg, oklch(0.62 0.13 305), oklch(0.55 0.12 315));
+    background: linear-gradient(135deg, #8A2BE2, #9370DB);
   }
   .gradient-role {
-    background: linear-gradient(135deg, oklch(0.68 0.12 90), oklch(0.62 0.10 80));
+    background: linear-gradient(135deg, #87CEFA, #6495ED);
   }
   .gradient-people {
-    background: linear-gradient(135deg, #6366f1, #818cf8);
+    background: linear-gradient(135deg, #0000CD, #4169E1);
   }
   .gradient-hero {
     background: linear-gradient(180deg, oklch(0.95 0.015 80), oklch(0.985 0.005 80));

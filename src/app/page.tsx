@@ -423,31 +423,31 @@ export default function Home() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="mb-5 flex-wrap h-auto bg-muted/50 p-1 rounded-lg">
             <TabsTrigger value="setup" className="text-xs">
-              <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Setup
+              <Sparkles className="h-3.5 w-3.5 mr-1.5 text-sector" /> Setup
             </TabsTrigger>
             <TabsTrigger value="repos" className="text-xs" disabled={!ownerInfo}>
-              <Github className="h-3.5 w-3.5 mr-1.5" /> Repos
+              <Github className="h-3.5 w-3.5 mr-1.5 text-people" /> Repos
             </TabsTrigger>
             <TabsTrigger value="scan" className="text-xs" disabled={!ownerInfo}>
-              <Loader2 className="h-3.5 w-3.5 mr-1.5" /> Scan
+              <Loader2 className="h-3.5 w-3.5 mr-1.5 text-tech" /> Scan
             </TabsTrigger>
             <TabsTrigger value="graph" className="text-xs" disabled={!skillMap}>
-              <Network className="h-3.5 w-3.5 mr-1.5" /> Skill Graph
+              <Network className="h-3.5 w-3.5 mr-1.5 text-methodology" /> Skill Graph
             </TabsTrigger>
             <TabsTrigger value="people" className="text-xs" disabled={!skillMap}>
-              <Users className="h-3.5 w-3.5 mr-1.5" /> People
+              <Users className="h-3.5 w-3.5 mr-1.5 text-people" /> People
             </TabsTrigger>
             <TabsTrigger value="analytics" className="text-xs" disabled={!skillMap}>
-              <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Analytics
+              <BarChart3 className="h-3.5 w-3.5 mr-1.5 text-problem" /> Analytics
             </TabsTrigger>
             <TabsTrigger value="activity" className="text-xs" disabled={!skillMap}>
-              <Activity className="h-3.5 w-3.5 mr-1.5" /> Activity
+              <Activity className="h-3.5 w-3.5 mr-1.5 text-role" /> Activity
             </TabsTrigger>
             <TabsTrigger value="compare" className="text-xs" disabled={!skillMap}>
-              <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Compare
+              <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5 text-methodology" /> Compare
             </TabsTrigger>
             <TabsTrigger value="insights" className="text-xs" disabled={!skillMap}>
-              <Lightbulb className="h-3.5 w-3.5 mr-1.5" /> Insights
+              <Lightbulb className="h-3.5 w-3.5 mr-1.5 text-sector" /> Insights
             </TabsTrigger>
           </TabsList>
 
@@ -569,7 +569,7 @@ export default function Home() {
                 </Button>
               )}
               {scanStatus?.status === "cancelled" && skillMap && (
-                <Button variant="outline" className="w-full active-scale border-amber-500/50 text-amber-700 hover:bg-amber-500/10" onClick={() => setActiveTab("graph")}>
+                <Button variant="outline" className="w-full active-scale border-sector/50 text-sector hover:bg-sector/10" onClick={() => setActiveTab("graph")}>
                   View partial results <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               )}
@@ -1446,21 +1446,21 @@ function InsightsPanel({
 
   const severityStyles: Record<Insight["severity"], { border: string; bg: string; icon: React.ReactNode; label: string }> = {
     info: {
-      border: "border-l-blue-500/60",
-      bg: "bg-blue-500/5",
-      icon: <Lightbulb className="h-4 w-4 text-blue-500" />,
+      border: "border-l-people/60",
+      bg: "bg-people/5",
+      icon: <Lightbulb className="h-4 w-4 text-people" />,
       label: "Info",
     },
     warning: {
-      border: "border-l-amber-500/70",
-      bg: "bg-amber-500/5",
-      icon: <Target className="h-4 w-4 text-amber-500" />,
+      border: "border-l-sector/70",
+      bg: "bg-sector/5",
+      icon: <Target className="h-4 w-4 text-sector" />,
       label: "Watch",
     },
     success: {
-      border: "border-l-emerald-500/60",
-      bg: "bg-emerald-500/5",
-      icon: <TrendingUp className="h-4 w-4 text-emerald-500" />,
+      border: "border-l-tech/60",
+      bg: "bg-tech/5",
+      icon: <TrendingUp className="h-4 w-4 text-tech" />,
       label: "Strength",
     },
   };
@@ -1498,16 +1498,16 @@ function InsightsPanel({
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 mt-4">
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-2.5 text-center">
-            <div className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-500">{counts.warning}</div>
+          <div className="rounded-lg border border-sector/30 bg-sector/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-sector">{counts.warning}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Watch</div>
           </div>
-          <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-2.5 text-center">
-            <div className="text-xl font-bold tabular-nums text-blue-600 dark:text-blue-400">{counts.info}</div>
+          <div className="rounded-lg border border-people/30 bg-people/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-people">{counts.info}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Info</div>
           </div>
-          <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-center">
-            <div className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{counts.success}</div>
+          <div className="rounded-lg border border-tech/30 bg-tech/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-tech">{counts.success}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Strengths</div>
           </div>
         </div>

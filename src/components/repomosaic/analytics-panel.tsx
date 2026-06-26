@@ -195,7 +195,7 @@ function OrgSummaryStrip({ skillMap }: { skillMap: AdvancedSkillMap }) {
       sub: "across 5 dimensions",
     },
     {
-      icon: <Award className="h-4 w-4 text-amber-500" />,
+      icon: <Award className="h-4 w-4 text-sector" />,
       label: "Most diverse",
       value: mostDiverse?.name ?? "—",
       sub: mostDiverse ? `${mostDiverse.unique} skills · ${mostDiverse.sectors} sectors` : "no data",
@@ -257,7 +257,7 @@ function getAccentForLabel(label: string): string {
   if (/commits/i.test(label)) return "bg-muted-foreground/40";
   if (/chunks/i.test(label)) return "bg-primary";
   if (/skills/i.test(label)) return "bg-sector";
-  if (/diverse/i.test(label)) return "bg-amber-500";
+  if (/diverse/i.test(label)) return "bg-sector";
   if (/sector/i.test(label)) return "bg-sector";
   return "bg-primary";
 }
@@ -818,21 +818,20 @@ function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
     critical: {
       label: "Critical",
       icon: <Flame className="h-2.5 w-2.5" />,
-      // red-700 / rose — high contrast
-      className: "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400",
-      dot: "bg-rose-500",
+      className: "border-problem/40 bg-problem/10 text-problem",
+      dot: "bg-problem",
     },
     important: {
       label: "Important",
       icon: <AlertTriangle className="h-2.5 w-2.5" />,
-      className: "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-      dot: "bg-amber-500",
+      className: "border-sector/40 bg-sector/10 text-sector",
+      dot: "bg-sector",
     },
     nice: {
       label: "Nice-to-have",
       icon: <Info className="h-2.5 w-2.5" />,
-      className: "border-sky-500/30 bg-sky-500/5 text-sky-600 dark:text-sky-400",
-      dot: "bg-sky-500",
+      className: "border-role/30 bg-role/5 text-role",
+      dot: "bg-role",
     },
   } as const;
 
@@ -858,7 +857,7 @@ function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <AlertTriangle className="h-4 w-4 text-sector" />
               Skill Gap Analysis
             </CardTitle>
             <CardDescription className="text-[11px] flex items-center gap-1 mt-1">
@@ -886,7 +885,7 @@ function SkillGapAnalysisCard({ skillMap }: { skillMap: AdvancedSkillMap }) {
       <CardContent>
         {missing.length === 0 ? (
           <div className="text-sm text-muted-foreground text-center py-8">
-            <Sparkles className="h-6 w-6 mx-auto mb-2 text-emerald-500" />
+            <Sparkles className="h-6 w-6 mx-auto mb-2 text-tech" />
             <div className="font-medium text-foreground">No gaps detected</div>
             <div className="text-[11px] mt-1">Every seed {dimLabel.toLowerCase()} appears in at least one commit.</div>
           </div>

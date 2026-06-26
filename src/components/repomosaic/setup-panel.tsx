@@ -97,19 +97,20 @@ export function SetupPanel({
   const currentModel = setup.llmConfig.model || providerInfo.defaultModel;
   const modelExistsInCatalog = models.some((m) => m.id === currentModel);
 
-  // Static accent → bg-class map so Tailwind can statically detect all classes.
+  // Static accent → logo color map. Every provider's accent dot uses one of
+  // the 6 logo hex colors (orange/turquoise/red/purple/lightblue/blue).
   const ACCENT_DOT: Record<string, string> = {
-    violet: "bg-violet-500",
-    emerald: "bg-emerald-500",
-    amber: "bg-amber-500",
-    rose: "bg-rose-500",
-    orange: "bg-orange-500",
-    blue: "bg-blue-500",
-    fuchsia: "bg-fuchsia-500",
-    teal: "bg-teal-500",
-    slate: "bg-slate-500",
+    violet: "bg-methodology",    // #8A2BE2 purple
+    emerald: "bg-tech",          // #40E0D0 turquoise
+    amber: "bg-sector",          // #FFA500 orange
+    rose: "bg-problem",          // #FF0000 red
+    orange: "bg-sector",         // #FFA500 orange
+    blue: "bg-people",           // #0000CD blue
+    fuchsia: "bg-methodology",   // #8A2BE2 purple
+    teal: "bg-tech",             // #40E0D0 turquoise
+    slate: "bg-role",            // #87CEFA light blue
   };
-  const providerDot = ACCENT_DOT[providerInfo.accent] ?? "bg-teal-500";
+  const providerDot = ACCENT_DOT[providerInfo.accent] ?? "bg-tech";
 
   const handleVerifyGithub = async () => {
     if (!setup.githubToken) {
@@ -197,10 +198,10 @@ export function SetupPanel({
         <Tabs defaultValue="github">
           <TabsList className="w-full bg-muted/50 p-1">
             <TabsTrigger value="github" className="flex-1 text-xs transition-all">
-              <Github className="h-3 w-3 mr-1.5" /> GitHub
+              <Github className="h-3 w-3 mr-1.5 text-people" /> GitHub
             </TabsTrigger>
             <TabsTrigger value="llm" className="flex-1 text-xs transition-all">
-              <Cable className="h-3 w-3 mr-1.5" /> LLM Connection
+              <Cable className="h-3 w-3 mr-1.5 text-methodology" /> LLM Connection
             </TabsTrigger>
           </TabsList>
 
@@ -233,7 +234,7 @@ export function SetupPanel({
               </div>
               {githubUser && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-tech" />
                   Authenticated as <Badge variant="outline" className="text-[10px] font-mono border-people/30 text-people">@{githubUser.login}</Badge>
                   {githubUser.name && <span>· {githubUser.name}</span>}
                 </div>
@@ -260,7 +261,7 @@ export function SetupPanel({
               </div>
               {ownerInfo && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                  <CheckCircle2 className="h-3.5 w-3.5 text-tech" />
                   Loaded {ownerInfo.kind}
                   <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">@{ownerInfo.info.login}</Badge>
                   {ownerInfo.info.publicRepos != null && <span>· {ownerInfo.info.publicRepos} public repos</span>}
@@ -273,11 +274,12 @@ export function SetupPanel({
               onClick={onLoadRepos}
               disabled={!ready}
               size="sm"
-              className="w-full h-10 active-scale transition-all duration-200 bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md"
+              className="w-full h-10 active-scale transition-all duration-200 text-white hover:shadow-md shadow-sm"
+              style={{ background: "linear-gradient(to right, #40E0D0, #20B2AA)" }}
             >
               {ready ? (
                 <>
-                  Continue to repos <Zap className="h-3.5 w-3.5 ml-1.5" />
+                  Continue to repos <Zap className="h-3.5 w-3.5 ml-1.5 text-sector" />
                 </>
               ) : (
                 "Sign in + Load org first"
@@ -321,7 +323,7 @@ export function SetupPanel({
                         <span className="font-medium">{p.label}</span>
                         <span className="text-muted-foreground text-[10px]">· {p.tagline}</span>
                         {p.sandboxDefault && (
-                          <Badge variant="outline" className="text-[9px] py-0.5 px-1.5 ml-1 bg-emerald-500/15 text-emerald-700 border-emerald-500/30 font-semibold">
+                          <Badge variant="outline" className="text-[9px] py-0.5 px-1.5 ml-1 border font-semibold" style={{ backgroundColor: "rgba(64, 224, 208, 0.15)", color: "#008B8B", borderColor: "rgba(64, 224, 208, 0.3)" }}>
                             no key
                           </Badge>
                         )}
@@ -388,7 +390,8 @@ export function SetupPanel({
                     href={providerInfo.keyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[10px] font-medium text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-0.5"
+                    className="text-[10px] font-medium hover:underline flex items-center gap-0.5"
+                    style={{ color: "#FFA500" }}
                   >
                     get key <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -409,7 +412,7 @@ export function SetupPanel({
                   className={cn(
                     "pr-9 font-mono text-xs h-9 focus-ring",
                     providerInfo.requiresKey && !setup.llmConfig.apiKey &&
-                      "ring-1 ring-amber-500/20"
+                      "ring-1 ring-sector/20"
                   )}
                 />
                 <button
@@ -422,7 +425,7 @@ export function SetupPanel({
               </div>
               {!providerInfo.requiresKey && (
                 <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <ShieldCheck className="h-2.5 w-2.5 text-emerald-500" />
+                  <ShieldCheck className="h-2.5 w-2.5" style={{ color: "#40E0D0" }} />
                   {providerInfo.sandboxDefault
                     ? "Sandbox default — runs through the pre-authenticated SDK."
                     : "Local server — no key needed."}
@@ -431,7 +434,7 @@ export function SetupPanel({
             </div>
 
             {/* Provider info card */}
-            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-gradient-to-br from-muted/60 to-muted/30 border border-border/80 border-l-4 border-l-teal-500/60 animate-fade-in-up">
+            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-gradient-to-br from-muted/60 to-muted/30 border border-border/80 border-l-4 animate-fade-in-up" style={{ borderLeftColor: "rgba(64, 224, 208, 0.6)" }}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
                   <span className={cn("h-1.5 w-1.5 rounded-full", providerDot)} />
@@ -466,7 +469,8 @@ export function SetupPanel({
               onClick={handlePingLLM}
               disabled={pingingLLM}
               size="sm"
-              className="w-full h-10 active-scale bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md transition-all duration-200"
+              className="w-full h-10 active-scale text-white shadow-sm hover:shadow-md transition-all duration-200"
+              style={{ background: "linear-gradient(to right, #40E0D0, #20B2AA)" }}
             >
               {pingingLLM ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -480,7 +484,7 @@ export function SetupPanel({
                 className={cn(
                   "text-xs flex items-center gap-1.5 animate-fade-in-up px-3 py-1.5 rounded-lg border w-fit",
                   llmOk
-                    ? "text-emerald-700 bg-emerald-500/10 border-emerald-500/20"
+                    ? "bg-tech/10 border-tech/20 text-tech"
                     : "text-destructive bg-destructive/10 border-destructive/20"
                 )}
               >

@@ -463,7 +463,7 @@ function ComparePeopleCard({ people }: { people: [PersonSkillRecord, PersonSkill
             </span>
             <span className={cn(
               "text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded",
-              overallJaccard >= 0.4 ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+              overallJaccard >= 0.4 ? "bg-tech/15 text-tech" : "bg-sector/15 text-sector"
             )}>
               {jaccardLabel(overallJaccard)}
             </span>
@@ -534,7 +534,7 @@ function ComparePeopleCard({ people }: { people: [PersonSkillRecord, PersonSkill
               </div>
               {shared.length > 0 && (
                 <div className="space-y-0.5">
-                  <div className="text-[9px] uppercase tracking-wide text-emerald-600 flex items-center gap-1">
+                  <div className="text-[9px] uppercase tracking-wide text-tech flex items-center gap-1">
                     <CheckCircle2 className="h-2.5 w-2.5" /> Shared
                   </div>
                   {shared.map((s) => (
