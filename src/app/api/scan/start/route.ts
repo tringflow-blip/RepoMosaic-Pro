@@ -280,7 +280,7 @@ async function runScan(jobId: string, params: {
             }
             job.doneChunks += 1;
             job.progress = Math.round(((ri + (ci + 1) / chunks.length) / selected.length) * 100);
-            // Small inter-chunk pause to be gentle on the GLM rate limit.
+            // Small inter-chunk pause to be gentle on the LLM rate limit.
             // The retry logic handles 429s, but pacing avoids them in the
             // first place on large scans.
             await new Promise((r) => setTimeout(r, 150));
@@ -404,7 +404,7 @@ export async function POST(req: Request) {
       org: parsed.owner,
       ownerKind: "org",
       branchMode: body.branchMode ?? "main",
-      model: body.llmConfig.model ?? "glm",
+      model: body.llmConfig.model ?? "glm-4-plus",
       provider: body.llmConfig.provider,
       status: "pending",
       progress: 0,

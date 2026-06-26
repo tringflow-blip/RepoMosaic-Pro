@@ -1,8 +1,8 @@
 /**
- * Advanced Skill-Map Aggregator
- * =============================
+ * Skill-Map Aggregator
+ * ====================
  *
- * Takes the per-chunk extractions from the GLM skill extractor and rolls
+ * Takes the per-chunk extractions from the skill extractor and rolls
  * them up into:
  *   - Per-person skill records (5 dimensions)
  *   - Org-wide rollups (5 dimensions)
@@ -27,7 +27,7 @@ function newDimAgg(): DimensionAgg {
 
 /**
  * Normalize a skill tag name so near-duplicates emitted by the LLM collapse
- * into a single canonical form. Examples the GLM model actually produces:
+ * into a single canonical form. Examples the model actually produces:
  *   "EduTech" / "EduCook" / "EduHealth" / "EduCooking"  →  "EduTech"
  *   "UI/UX Implementation" / "UI/UX & Design Systems"   →  kept distinct
  *   "Refactoring" / "Refactor"                           →  "Refactoring"
@@ -39,7 +39,7 @@ function newDimAgg(): DimensionAgg {
  *   2. ALIASES map handles common LLM abbreviations (js → JavaScript).
  *   3. STEM_RULES collapses any tag whose normalized form starts with a known
  *      stem (e.g. "edu" → "EduTech", "fintech" → "FinTech"). This catches the
- *      GLM's "EduCook"/"EduHealth"/"EduCooking" pattern that prefix-merging
+ *      model's "EduCook"/"EduHealth"/"EduCooking" pattern that prefix-merging
  *      misses because their normalized forms ("educook", "eduhealth",
  *      "educoking") don't share a ≥4-char prefix.
  *   4. If two normalized forms are equal OR one is a prefix of the other
@@ -72,7 +72,7 @@ const ALIASES: Record<string, string> = {
 
 /**
  * Stem rules: if a normalized tag name STARTS WITH one of these stems, it gets
- * remapped to the canonical seed name. This handles the GLM's tendency to
+ * remapped to the canonical seed name. This handles the model's tendency to
  * invent variations like "EduCook", "EduHealth", "EduCooking" — they all
  * normalize to "edu..." which should map to "EduTech".
  *

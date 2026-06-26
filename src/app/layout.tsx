@@ -15,19 +15,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "RepoMosaic Pro — Advanced Skill Map",
+  title: "RepoMosaic Pro — Skill Attribution",
   description:
-    "GLM-powered multi-dimensional skill mapping for GitHub organizations. Maps sectors, problem types, tech, methodologies and roles — attributed to each committer.",
+    "Multi-dimensional skill attribution for GitHub organizations. Maps sectors, problem types, tech, methodologies and roles — attributed to each committer.",
   keywords: [
     "RepoMosaic",
     "Skill Graph",
-    "GLM",
+    "Skill Attribution",
     "GitHub",
     "Capability DNA",
     "Skill Map",
   ],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "/logo.png",
+    apple: "/logo.png",
   },
 };
 

@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
 function toMarkdown(m: AdvancedSkillMap): string {
   const lines: string[] = [];
-  lines.push(`# Advanced Skill Map — ${m.org}`);
+  lines.push(`# Skill Attribution Report — ${m.org}`);
   lines.push("");
   lines.push(`- Generated: ${m.generatedAt}`);
   lines.push(`- Model: ${m.model} (${m.provider})`);

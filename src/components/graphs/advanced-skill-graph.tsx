@@ -806,7 +806,7 @@ function SkillListWithEvidence({
                 <div className="mt-1 mb-1.5 p-2 rounded-md bg-muted/40 border border-border/40 space-y-1 animate-fade-in-up">
                   <div className="text-[9px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-1">
                     <Search className="h-2.5 w-2.5" />
-                    Commit-level evidence from GLM
+                    Commit-level evidence
                   </div>
                   {evidenceEntries.map((e, i) => (
                     <div key={i} className="text-[10px] flex items-start gap-1.5">

@@ -8,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Github,
   Sparkles,
+  Cable,
   Boxes,
   Users,
   BarChart3,
@@ -50,7 +51,7 @@ export default function Home() {
   const [setup, setSetup] = useState<SetupState>({
     githubToken: "",
     ownerInput: "https://github.com/Gaia-Recipe",
-    llmConfig: { provider: "glm", model: "glm" },
+    llmConfig: { provider: "zai", model: "glm-4-plus" },
   });
   const [githubUser, setGithubUser] = useState<{ login: string; name: string | null; avatarUrl: string } | null>(null);
   const [ownerInfo, setOwnerInfo] = useState<{ kind: "org" | "user"; info: OwnerInfo } | null>(null);
@@ -227,7 +228,7 @@ export default function Home() {
         url.searchParams.set("org", ownerInfo.info.login);
         url.searchParams.set("ownerKind", ownerInfo.kind);
         url.searchParams.set("branchMode", branchMode);
-        url.searchParams.set("model", setup.llmConfig.model ?? "glm");
+        url.searchParams.set("model", setup.llmConfig.model ?? "glm-4-plus");
         url.searchParams.set("provider", setup.llmConfig.provider);
         const r = await fetch(url.toString());
         if (!r.ok) return;
@@ -328,15 +329,19 @@ export default function Home() {
       <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl gradient-sector flex items-center justify-center shrink-0 shadow-soft">
-              <Network className="h-5 w-5 text-white" />
+            <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-soft ring-1 ring-border/40">
+              <img
+                src="/logo.png"
+                alt="RepoMosaic Pro logo"
+                className="h-full w-full object-cover"
+              />
             </div>
             <div className="min-w-0">
               <h1 className="text-sm sm:text-base font-semibold tracking-tight truncate">
-                RepoMosaic Pro <span className="text-muted-foreground font-normal">· Advanced Skill Map</span>
+                RepoMosaic Pro
               </h1>
               <p className="text-[10px] text-muted-foreground hidden sm:block">
-                GLM-powered multi-dimensional skill attribution per committer
+                Multi-dimensional skill attribution for GitHub organizations
               </p>
             </div>
           </div>
@@ -416,10 +421,10 @@ export default function Home() {
               />
               <div className="mt-4 grid sm:grid-cols-3 gap-3">
                 <FeatureChip
-                  icon={<Sparkles className="h-4 w-4 text-sector" />}
-                  title="GLM Skill Extractor"
-                  desc="Each commit chunk → multi-dim JSON via GLM-4"
-                  gradient="gradient-sector"
+                  icon={<Cable className="h-4 w-4 text-methodology" />}
+                  title="LLM Skill Attribution"
+                  desc="Each commit chunk → multi-dim JSON tags"
+                  gradient="gradient-methodology"
                 />
                 <FeatureChip
                   icon={<Boxes className="h-4 w-4 text-methodology" />}
@@ -702,10 +707,12 @@ export default function Home() {
               <Network className="h-3 w-3 text-sector" />
               <span className="font-medium">RepoMosaic Pro</span>
               <span className="text-border">·</span>
-              <span>Advanced Skill Map</span>
+              <span>Skill Attribution</span>
             </div>
             <span className="text-border">·</span>
-            <span className="font-mono">GLM {setup.llmConfig.provider === "glm" ? "(default)" : `+ ${setup.llmConfig.provider}`}</span>
+            <span className="font-mono text-muted-foreground">
+              {setup.llmConfig.provider} / {setup.llmConfig.model ?? "auto"}
+            </span>
             <span className="hidden md:inline text-border">·</span>
             <span className="hidden md:inline-flex items-center gap-1" title="Keyboard shortcuts: 1-9 switch tabs, / focus search, Esc close panel">
               <Keyboard className="h-3 w-3" />
@@ -720,7 +727,7 @@ export default function Home() {
                 <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> scan running…
               </Button>
             )}
-            <span>Built with <Heart className="h-2.5 w-2.5 inline text-sector" /> & GLM</span>
+            <span>Built with <Heart className="h-2.5 w-2.5 inline text-sector" /> for engineering teams</span>
           </div>
         </div>
       </footer>
@@ -837,7 +844,7 @@ function PeopleTable({
     }
   };
 
-  const SortIcon = ({ active }: { active: boolean }) =>
+  const renderSortIcon = (active: boolean) =>
     active ? (
       sortDir === "asc" ? <ChevronUp className="h-3 w-3 inline ml-0.5" /> : <ChevronDown className="h-3 w-3 inline ml-0.5" />
     ) : null;
@@ -911,25 +918,25 @@ function PeopleTable({
                 className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[220px] cursor-pointer hover:text-foreground transition-colors select-none"
                 onClick={() => toggleSort("name")}
               >
-                Person <SortIcon active={sortKey === "name"} />
+                Person {renderSortIcon(sortKey === "name")}
               </th>
               <th
                 className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[110px] cursor-pointer hover:text-foreground transition-colors select-none"
                 onClick={() => toggleSort("commits")}
               >
-                Commits <SortIcon active={sortKey === "commits"} />
+                Commits {renderSortIcon(sortKey === "commits")}
               </th>
               <th
                 className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[80px] cursor-pointer hover:text-foreground transition-colors select-none"
                 onClick={() => toggleSort("chunks")}
               >
-                Chunks <SortIcon active={sortKey === "chunks"} />
+                Chunks {renderSortIcon(sortKey === "chunks")}
               </th>
               <th
                 className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground w-[70px] cursor-pointer hover:text-foreground transition-colors select-none"
                 onClick={() => toggleSort("repos")}
               >
-                Repos <SortIcon active={sortKey === "repos"} />
+                Repos {renderSortIcon(sortKey === "repos")}
               </th>
               <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-sector min-w-[160px]">Sectors</th>
               <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-problem min-w-[180px]">Problem Types</th>

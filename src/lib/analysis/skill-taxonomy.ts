@@ -12,7 +12,7 @@
  *   4. Methodology    — engineering approach / process
  *   5. Role           — what role the author played in this chunk
  *
- * These are *seed* vocabularies. The GLM skill-extractor is free to return
+ * These are *seed* vocabularies. The skill extractor is free to return
  * tags outside this list — the aggregator will accept any string — but the
  * seeds give the model consistent terminology and the UI a known palette.
  */
@@ -128,6 +128,7 @@ export const TECH_SEEDS: string[] = [
   "OpenAI SDK",
   "Anthropic SDK",
   "GLM SDK",
+  "Z.ai SDK",
   "Hugging Face",
   "PyTorch",
   "TensorFlow",
@@ -243,7 +244,7 @@ export const ROLE_SEEDS: string[] = [
   "Research & Prototyping",
 ];
 
-/** A single skill tag emitted by the GLM skill extractor for one chunk. */
+/** A single skill tag emitted by the skill extractor for one chunk. */
 export type SkillTag = {
   dimension: SkillDimension;
   name: string;
@@ -251,16 +252,16 @@ export type SkillTag = {
   evidence: string[]; // commit messages / file paths that justify this tag
 };
 
-/** The full skill payload emitted by GLM for a single chunk of commits. */
+/** The full skill payload emitted by the model for a single chunk of commits. */
 export type ChunkSkillExtraction = {
   chunkId: string;
   author: string;
   authorLogin: string | null;
   repo: string;
   tags: SkillTag[];
-  /** One-sentence GLM summary of what this chunk accomplished. */
+  /** One-sentence summary of what this chunk accomplished. */
   summary: string;
-  /** Optional GLM-inferred "primary sector" for this chunk — used to roll up
+  /** Optional inferred "primary sector" for this chunk — used to roll up
    *  per-person sector scores. */
   primarySector: string | null;
   /** ISO date strings (YYYY-MM-DD) of each commit in the chunk — used for the

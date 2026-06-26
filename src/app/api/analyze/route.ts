@@ -11,8 +11,8 @@ export const maxDuration = 120;
  *  }
  *  Returns: ChunkSkillExtraction
  *
- *  This endpoint exposes the GLM "skill" directly so you can test a single
- *  chunk without running a full scan.
+ *  This endpoint exposes the skill extractor directly so you can test a
+ *  single chunk without running a full scan.
  */
 export async function POST(req: Request) {
   try {

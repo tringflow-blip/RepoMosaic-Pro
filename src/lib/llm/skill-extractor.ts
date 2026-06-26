@@ -1,22 +1,26 @@
 /**
- * GLM Skill Extractor
- * ===================
+ * Skill Extractor
+ * ===============
  *
- * This is the "skill" the user asked for: every chunk of commits is sent
- * through this reusable prompt to GLM (or any OpenAI-compatible LLM), and
- * the model returns a structured JSON of multi-dimensional skill tags.
+ * Every chunk of commits is sent through this reusable prompt to an LLM,
+ * and the model returns a structured JSON of multi-dimensional skill tags.
  *
  * The chunk is bounded by maxCommitsPerChunk (default 8) so we don't blow
  * the context window on huge repos. Each chunk is one LLM call.
  *
  * Provider flexibility:
- *   - Default: GLM via z-ai-web-dev-sdk (no API key needed in the UI — the
- *     SDK is pre-authenticated in this sandbox).
- *   - Optional: a custom OpenAI-compatible endpoint (baseURL + apiKey +
- *     model) that the user pastes in the Settings panel. This is the
- *     "cloud or local codecs" flexibility the user requested.
+ *   - Default: the sandbox pre-authenticated SDK (Z.ai) — no API key needed.
+ *   - Optional: any of the curated providers in `providers.ts` (OpenAI,
+ *     Anthropic, Google, Mistral, DeepSeek, Groq, Together, Ollama). The
+ *     user picks a provider + model from dropdowns and pastes an API key
+ *     (except for the sandbox default and local Ollama, which need no key).
  */
 import ZAI from "z-ai-web-dev-sdk";
+import {
+  getProvider,
+  normalizeProvider,
+  type ProviderKind,
+} from "@/lib/llm/providers";
 import type {
   ChunkSkillExtraction,
   SkillDimension,
@@ -30,13 +34,15 @@ import {
   ROLE_SEEDS,
 } from "@/lib/analysis/skill-taxonomy";
 
-export type LLMProvider = "glm" | "openai-compatible";
+export type LLMProvider = ProviderKind;
 
 export type LLMConfig = {
   provider: LLMProvider;
-  /** When provider === "openai-compatible" */
+  /** API key for the chosen provider. Optional for the sandbox default and Ollama. */
   apiKey?: string;
+  /** Base URL is derived from the provider catalog — kept here only for legacy compat. */
   baseURL?: string;
+  /** Model id from the provider's catalog. */
   model?: string;
 };
 
@@ -54,7 +60,7 @@ export function buildSkillPrompt(): string {
     `### ${d.label}\nSuggested vocabulary (you may add your own when justified):\n${d.seeds.map((s) => `- ${s}`).join("\n")}`
   ).join("\n\n");
 
-  return `You are the RepoMosaic Advanced Skill Mapper — an expert engineering analyst that reads chunks of git commit activity and tags them with multi-dimensional skills.
+  return `You are the RepoMosaic Skill Mapper — an expert engineering analyst that reads chunks of git commit activity and tags them with multi-dimensional skills.
 
 For each chunk you receive, you must:
 1. Understand what the author actually did (read commit messages + file paths + diff stats).
@@ -153,48 +159,70 @@ function normaliseTags(raw: unknown): SkillTag[] {
     .filter((t) => t.name && DIMENSIONS.some((d) => d.key === t.dimension));
 }
 
-/** Invoke the LLM (GLM by default, OpenAI-compatible if configured).
- *  Includes retry with exponential backoff for transient errors (429, 5xx,
- *  network timeouts) so we don't lose skill data to rate-limiting. */
+/** Invoke the LLM. Routes to the sandbox SDK for the default provider,
+ *  or to the provider's OpenAI-compatible endpoint otherwise. Includes
+ *  retry with exponential backoff for transient errors (429, 5xx, network
+ *  timeouts) so we don't lose skill data to rate-limiting. */
 async function callLLM(
   config: LLMConfig,
   systemPrompt: string,
   userMessage: string
 ): Promise<{ content: string; model: string; provider: string }> {
-  if (config.provider === "openai-compatible") {
-    if (!config.apiKey || !config.baseURL) {
-      throw new Error("OpenAI-compatible provider requires apiKey + baseURL");
-    }
-    const model = config.model || "gpt-4o-mini";
-    const resp = await fetchWithRetry(`${config.baseURL.replace(/\/$/, "")}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-      }),
-    });
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`LLM HTTP ${resp.status}: ${txt.slice(0, 200)}`);
-    }
-    const data = (await resp.json()) as {
-      choices?: { message?: { content?: string } }[];
-    };
-    const content = data.choices?.[0]?.message?.content ?? "";
-    return { content, model, provider: "openai-compatible" };
+  const providerId = normalizeProvider(config.provider);
+
+  // Sandbox default — uses the pre-authenticated SDK, no key needed.
+  if (providerId === "zai") {
+    return callSDKWithRetry(systemPrompt, userMessage);
   }
 
-  // GLM via z-ai-web-dev-sdk (default) — retry on 429/5xx/network errors
-  return callGLMWithRetry(systemPrompt, userMessage);
+  const info = getProvider(providerId);
+  const baseURL = config.baseURL || info.baseURL;
+  if (!baseURL) {
+    throw new Error(`No base URL configured for provider "${info.label}"`);
+  }
+  // Local providers (Ollama) accept any non-empty key; remote ones require a real key.
+  if (info.requiresKey && !config.apiKey) {
+    throw new Error(`${info.label} requires an API key — add one in the LLM Connection panel`);
+  }
+  const apiKey = config.apiKey || "ollama";
+  const model = config.model || info.defaultModel;
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (info.authScheme === "bearer") {
+    headers.Authorization = `Bearer ${apiKey}`;
+  } else if (info.authScheme === "x-api-key") {
+    headers["x-api-key"] = apiKey;
+  }
+  if (info.extraHeaders) Object.assign(headers, info.extraHeaders);
+
+  const body: Record<string, unknown> = {
+    model,
+    messages: [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+    temperature: 0.2,
+  };
+  // Anthropic's OpenAI-compatible gateway doesn't support response_format;
+  // the others do. We add it only when the provider opts in.
+  if (providerId !== "anthropic") {
+    body.response_format = { type: "json_object" };
+  }
+
+  const resp = await fetchWithRetry(`${baseURL.replace(/\/$/, "")}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const txt = await resp.text();
+    throw new Error(`LLM HTTP ${resp.status}: ${txt.slice(0, 200)}`);
+  }
+  const data = (await resp.json()) as {
+    choices?: { message?: { content?: string } }[];
+  };
+  const content = data.choices?.[0]?.message?.content ?? "";
+  return { content, model, provider: providerId };
 }
 
 /** Sleep helper. */
@@ -245,8 +273,8 @@ async function fetchWithRetry(
   throw lastErr;
 }
 
-/** GLM SDK call with retry — for the default z-ai-web-dev-sdk provider. */
-async function callGLMWithRetry(
+/** Sandbox SDK call with retry — for the default pre-authenticated provider. */
+async function callSDKWithRetry(
   systemPrompt: string,
   userMessage: string,
   maxRetries = 4
@@ -266,8 +294,8 @@ async function callGLMWithRetry(
       const content = completion.choices[0]?.message?.content ?? "";
       return {
         content,
-        model: (completion as unknown as { model?: string }).model || "glm",
-        provider: "glm",
+        model: (completion as unknown as { model?: string }).model || "glm-4-plus",
+        provider: "zai",
       };
     } catch (err) {
       lastErr = err;
@@ -276,7 +304,7 @@ async function callGLMWithRetry(
         const delay = Math.min(30000, 1000 * 2 ** attempt + Math.random() * 500);
         const msg = (err as Error).message.slice(0, 100);
         console.warn(
-          `[glm-retry] attempt ${attempt + 1}/${maxRetries + 1} failed: ${msg} → retrying in ${Math.round(delay)}ms`
+          `[llm-retry] attempt ${attempt + 1}/${maxRetries + 1} failed: ${msg} → retrying in ${Math.round(delay)}ms`
         );
         // Push to the global retry registry so the scan log can pick it up
         pushRetryEvent({
@@ -362,8 +390,9 @@ export async function extractSkillsForChunk(
   const userMessage = buildChunkUserMessage(chunk);
 
   let parsed: { summary?: string; primarySector?: string | null; tags?: unknown };
-  let model = "glm";
-  let provider = "glm";
+  const providerId = normalizeProvider(config.provider);
+  let model = config.model || getProvider(providerId).defaultModel;
+  let provider = providerId;
   let failed = false;
   try {
     const { content, model: m, provider: p } = await callLLM(config, systemPrompt, userMessage);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   KeyRound,
   Github,
-  Sparkles,
   Sun,
   Moon,
   Settings2,
@@ -23,11 +29,21 @@ import {
   Network,
   Boxes,
   Zap,
+  Cable,
+  ExternalLink,
+  Cpu,
+  ShieldCheck,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
 import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
+import {
+  PROVIDERS,
+  getProvider,
+  normalizeProvider,
+  type ProviderKind,
+} from "@/lib/llm/providers";
 
 export type SetupState = {
   githubToken: string;
@@ -75,6 +91,12 @@ export function SetupPanel({
   const [showGithubToken, setShowGithubToken] = useState(false);
   const [showLlmKey, setShowLlmKey] = useState(false);
 
+  const providerId = normalizeProvider(setup.llmConfig.provider);
+  const providerInfo = getProvider(providerId);
+  const models = useMemo(() => providerInfo.models, [providerInfo.id]);
+  const currentModel = setup.llmConfig.model || providerInfo.defaultModel;
+  const modelExistsInCatalog = models.some((m) => m.id === currentModel);
+
   const handleVerifyGithub = async () => {
     if (!setup.githubToken) {
       toast({ title: "Token required", description: "Paste a GitHub personal access token.", variant: "destructive" });
@@ -113,13 +135,21 @@ export function SetupPanel({
 
   const handlePingLLM = async () => {
     setPingingLLM(true);
+    setLlmOk(null);
     try {
       const r = await onPingLLM(setup.llmConfig);
       setLlmOk(r.ok);
       if (r.ok) {
-        toast({ title: "LLM connected", description: `${r.provider} · ${r.model}` });
+        toast({
+          title: "Connection verified",
+          description: `${providerInfo.label} · ${r.model}`,
+        });
       } else {
-        toast({ title: "LLM ping failed", description: r.error ?? "Unknown error", variant: "destructive" });
+        toast({
+          title: "Connection failed",
+          description: r.error ?? "Unknown error",
+          variant: "destructive",
+        });
       }
     } finally {
       setPingingLLM(false);
@@ -140,8 +170,8 @@ export function SetupPanel({
               Setup
             </CardTitle>
             <CardDescription className="mt-1.5">
-              Connect GitHub + configure the LLM skill extractor. GLM is pre-wired; you can also point at any
-              OpenAI-compatible cloud or local endpoint.
+              Connect GitHub and pick an LLM provider. The sandbox default needs no
+              key — add one only when you switch to a hosted provider.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="shrink-0 active-scale">
@@ -156,7 +186,7 @@ export function SetupPanel({
               <Github className="h-3 w-3 mr-1.5" /> GitHub
             </TabsTrigger>
             <TabsTrigger value="llm" className="flex-1 text-xs">
-              <Sparkles className="h-3 w-3 mr-1.5" /> LLM Skill
+              <Cable className="h-3 w-3 mr-1.5" /> LLM Connection
             </TabsTrigger>
           </TabsList>
 
@@ -242,98 +272,204 @@ export function SetupPanel({
           </TabsContent>
 
           <TabsContent value="llm" className="space-y-3 mt-3">
-            <Tabs
-              value={setup.llmConfig.provider}
-              onValueChange={(v) =>
-                setSetup({
-                  ...setup,
-                  llmConfig: { ...setup.llmConfig, provider: v as "glm" | "openai-compatible" },
-                })
-              }
+            {/* Provider selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Cable className="h-3 w-3 text-methodology" /> Provider
+              </Label>
+              <Select
+                value={providerId}
+                onValueChange={(v) => {
+                  const next = getProvider(v as ProviderKind);
+                  setSetup({
+                    ...setup,
+                    llmConfig: {
+                      ...setup.llmConfig,
+                      provider: v as ProviderKind,
+                      // Switch to the new provider's default model + reset baseURL
+                      // so the catalog URL takes effect.
+                      model: next.defaultModel,
+                      baseURL: undefined,
+                      // Clear the key when switching to a no-key provider.
+                      apiKey: next.requiresKey ? setup.llmConfig.apiKey : undefined,
+                    },
+                  });
+                  setLlmOk(null);
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs focus-ring">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROVIDERS.map((p) => (
+                    <SelectItem key={p.id} value={p.id} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{p.label}</span>
+                        <span className="text-muted-foreground text-[10px]">· {p.tagline}</span>
+                        {p.sandboxDefault && (
+                          <Badge variant="outline" className="text-[8px] py-0 px-1 ml-1 border-methodology/40 text-methodology">
+                            no key
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Model selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center gap-1.5">
+                <Cpu className="h-3 w-3 text-tech" /> Model
+              </Label>
+              <Select
+                value={modelExistsInCatalog ? currentModel : "__custom__"}
+                onValueChange={(v) => {
+                  if (v === "__custom__") return;
+                  setSetup({
+                    ...setup,
+                    llmConfig: { ...setup.llmConfig, model: v },
+                  });
+                  setLlmOk(null);
+                }}
+              >
+                <SelectTrigger className="h-9 text-xs focus-ring">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {models.map((m) => (
+                    <SelectItem key={m.id} value={m.id} className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{m.label}</span>
+                        {m.hint && (
+                          <span className="text-muted-foreground text-[10px]">· {m.hint}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                  {!modelExistsInCatalog && currentModel && (
+                    <SelectItem value="__custom__" className="text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium font-mono">{currentModel}</span>
+                        <Badge variant="outline" className="text-[8px] py-0 px-1">custom</Badge>
+                      </div>
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground font-mono truncate">
+                id: <span className="text-foreground/70">{currentModel}</span>
+              </p>
+            </div>
+
+            {/* API key — optional for sandbox default + local providers */}
+            <div className="space-y-1.5">
+              <Label className="text-xs flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <KeyRound className="h-3 w-3 text-problem" /> API Key
+                </span>
+                {providerInfo.keyUrl && (
+                  <a
+                    href={providerInfo.keyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[10px] text-methodology hover:underline flex items-center gap-0.5"
+                  >
+                    get key <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                )}
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showLlmKey ? "text" : "password"}
+                  placeholder={
+                    providerInfo.requiresKey
+                      ? `Paste your ${providerInfo.label} key…`
+                      : "Optional — leave blank to use the default"
+                  }
+                  value={setup.llmConfig.apiKey ?? ""}
+                  onChange={(e) =>
+                    setSetup({ ...setup, llmConfig: { ...setup.llmConfig, apiKey: e.target.value } })
+                  }
+                  className="pr-9 font-mono text-xs h-9 focus-ring"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLlmKey(!showLlmKey)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showLlmKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              </div>
+              {!providerInfo.requiresKey && (
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <ShieldCheck className="h-2.5 w-2.5 text-emerald-500" />
+                  {providerInfo.sandboxDefault
+                    ? "Sandbox default — runs through the pre-authenticated SDK."
+                    : "Local server — no key needed."}
+                </p>
+              )}
+            </div>
+
+            {/* Provider info card */}
+            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-muted/40 border border-border/60 animate-fade-in-up">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-medium text-foreground text-xs">{providerInfo.label}</span>
+                <span className="text-[10px]">{providerInfo.tagline}</span>
+              </div>
+              {providerInfo.baseURL && (
+                <div className="font-mono text-[10px] truncate text-muted-foreground/80">
+                  {providerInfo.baseURL}
+                </div>
+              )}
+              <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
+                <Badge variant="outline" className="text-[9px] font-mono py-0">
+                  temp: 0.2
+                </Badge>
+                <Badge variant="outline" className="text-[9px] font-mono py-0">
+                  5 dimensions
+                </Badge>
+                <Badge variant="outline" className="text-[9px] font-mono py-0">
+                  JSON output
+                </Badge>
+                {providerInfo.authScheme === "x-api-key" && (
+                  <Badge variant="outline" className="text-[9px] font-mono py-0">
+                    x-api-key
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            <Button
+              onClick={handlePingLLM}
+              disabled={pingingLLM}
+              variant="outline"
+              size="sm"
+              className="w-full active-scale"
             >
-              <TabsList className="w-full">
-                <TabsTrigger value="glm" className="flex-1 text-xs">
-                  <Sparkles className="h-3 w-3 mr-1" /> GLM (default)
-                </TabsTrigger>
-                <TabsTrigger value="openai-compatible" className="flex-1 text-xs">
-                  <PlugZap className="h-3 w-3 mr-1" /> OpenAI-compatible
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
-
-            {setup.llmConfig.provider === "glm" && (
-              <div className="text-[11px] text-muted-foreground space-y-2 p-4 rounded-xl bg-muted/40 border border-border/60 animate-fade-in-up">
-                <div className="flex items-center gap-2">
-                  <div className="h-5 w-5 rounded gradient-methodology flex items-center justify-center shrink-0">
-                    <Sparkles className="h-3 w-3 text-white" />
-                  </div>
-                  <span className="font-medium text-foreground text-xs">GLM via z-ai-web-dev-sdk</span>
-                </div>
-                <div>The skill extractor uses the pre-authenticated GLM SDK. No API key required in this sandbox — every commit chunk is sent through the same reusable skill prompt.</div>
-                <div className="flex items-center gap-2 pt-1">
-                  <Badge variant="outline" className="text-[9px] font-mono py-0">model: glm (auto)</Badge>
-                  <Badge variant="outline" className="text-[9px] font-mono py-0">temperature: 0.2</Badge>
-                  <Badge variant="outline" className="text-[9px] font-mono py-0">5 dimensions</Badge>
-                </div>
-              </div>
-            )}
-
-            {setup.llmConfig.provider === "openai-compatible" && (
-              <div className="space-y-2.5">
-                <div className="space-y-1">
-                  <Label className="text-xs">Base URL</Label>
-                  <Input
-                    placeholder="https://api.openai.com/v1  ·  http://localhost:11434/v1 (Ollama)  ·  http://localhost:8000/v1 (vLLM/codecs)"
-                    value={setup.llmConfig.baseURL ?? ""}
-                    onChange={(e) =>
-                      setSetup({ ...setup, llmConfig: { ...setup.llmConfig, baseURL: e.target.value } })
-                    }
-                    className="font-mono text-xs h-9 focus-ring"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">API Key</Label>
-                  <div className="relative">
-                    <Input
-                      type={showLlmKey ? "text" : "password"}
-                      placeholder="sk-...  (or any non-empty string for local servers)"
-                      value={setup.llmConfig.apiKey ?? ""}
-                      onChange={(e) =>
-                        setSetup({ ...setup, llmConfig: { ...setup.llmConfig, apiKey: e.target.value } })
-                      }
-                      className="pr-9 font-mono text-xs h-9 focus-ring"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowLlmKey(!showLlmKey)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showLlmKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Model</Label>
-                  <Input
-                    placeholder="gpt-4o-mini  ·  llama3.1:8b  ·  qwen2.5-coder:7b"
-                    value={setup.llmConfig.model ?? ""}
-                    onChange={(e) =>
-                      setSetup({ ...setup, llmConfig: { ...setup.llmConfig, model: e.target.value } })
-                    }
-                    className="font-mono text-xs h-9 focus-ring"
-                  />
-                </div>
-              </div>
-            )}
-
-            <Button onClick={handlePingLLM} disabled={pingingLLM} variant="outline" size="sm" className="w-full active-scale">
-              {pingingLLM ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <PlugZap className="h-3.5 w-3.5 mr-1.5" />}
-              Test LLM connection
+              {pingingLLM ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <PlugZap className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              Test connection
             </Button>
             {llmOk !== null && (
-              <div className={cn("text-xs flex items-center gap-1.5 animate-fade-in-up", llmOk ? "text-emerald-600" : "text-destructive")}>
-                {llmOk ? <CheckCircle2 className="h-3.5 w-3.5" /> : <EyeOff className="h-3.5 w-3.5" />}
-                {llmOk ? "LLM reachable" : "LLM unreachable — check config"}
+              <div
+                className={cn(
+                  "text-xs flex items-center gap-1.5 animate-fade-in-up",
+                  llmOk ? "text-emerald-600" : "text-destructive"
+                )}
+              >
+                {llmOk ? (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                ) : (
+                  <EyeOff className="h-3.5 w-3.5" />
+                )}
+                {llmOk
+                  ? "Connection verified — ready to scan"
+                  : "Connection failed — check the key or provider"}
               </div>
             )}
           </TabsContent>

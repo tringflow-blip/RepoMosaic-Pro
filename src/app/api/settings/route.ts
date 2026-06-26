@@ -11,8 +11,8 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const org = url.searchParams.get("org");
   const branchMode = url.searchParams.get("branchMode") ?? "main";
-  const model = url.searchParams.get("model") ?? "glm";
-  const provider = url.searchParams.get("provider") ?? "glm";
+  const model = url.searchParams.get("model") ?? "glm-4-plus";
+  const provider = url.searchParams.get("provider") ?? "zai";
   if (!org) return NextResponse.json({ cached: null });
   try {
     const row = await db.scanCache.findUnique({
