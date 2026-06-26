@@ -44,7 +44,7 @@ type ScanJob = {
   branchMode: string;
   model: string;
   provider: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   progress: number;
   phase: string;
   message: string;
@@ -56,6 +56,17 @@ type ScanJob = {
   failedChunks: number; // chunks where LLM analysis failed (after retries)
   chunkEvents: ChunkEvent[]; // per-chunk outcome log for the scan-log export
   retryLog: { chunkId: string; attempt: number; error: string; timestamp: number }[];
+  /** Cancellation flag — set by POST /api/scan/cancel. The scan loop checks
+   *  this between chunks and aborts gracefully (still persists partial results
+   *  if any chunks completed). */
+  cancelRequested: boolean;
+  /** Adaptive pacing state — current inter-chunk delay in ms. Grows when 429s
+   *  hit, shrinks back when a streak of clean chunks succeeds. Surfaced in the
+   *  status payload so the UI can show live "rate-limit backoff: Xms". */
+  currentPaceMs: number;
+  /** Timestamp of the last 429 encountered by any chunk — used to avoid
+   *  growing the pace from multiple chunks simultaneously. */
+  lastRateLimitedAt: number | null;
   result: unknown | null;
   error: string | null;
   startedAt: number;
@@ -140,6 +151,8 @@ async function runScan(jobId: string, params: {
     let lastProvider = job.provider;
 
     for (let ri = 0; ri < selected.length; ri++) {
+      // Cancellation checkpoint — abort before starting a new repo
+      if (job.cancelRequested) break;
       const repo = selected[ri];
       job.phase = `repo ${ri + 1}/${selected.length}`;
       job.message = `Scanning ${repo.name}…`;
@@ -149,6 +162,8 @@ async function runScan(jobId: string, params: {
       const branches = params.branchMode === "all" ? await listBranchesSafe(params.token, info.login, repo.name) : [repo.defaultBranch];
 
       for (const branch of branches) {
+        // Cancellation checkpoint — abort before fetching a new branch
+        if (job.cancelRequested) break;
         // 1. Fetch contributors for ownership
         let contribs: Contributor[] = [];
         try {
@@ -209,8 +224,11 @@ async function runScan(jobId: string, params: {
         }
 
         for (const [authorKey, authorCommits] of byAuthor.entries()) {
+          if (job.cancelRequested) break;
           const chunks = chunkCommits(authorCommits, params.commitsPerChunk);
           for (let ci = 0; ci < chunks.length; ci++) {
+            // Cancellation checkpoint — abort before invoking the LLM on the next chunk
+            if (job.cancelRequested) break;
             const chunk = chunks[ci];
             const chunkId = `${repo.name}:${branch}:${authorKey}:${ci}`;
             job.totalChunks += 1;
@@ -235,6 +253,17 @@ async function runScan(jobId: string, params: {
               extractions.push({ ...ext, commits: chunk.length });
               if (ext.failed) {
                 job.failedChunks += 1;
+                // Adaptive pacing: a failed chunk usually means we hit the
+                // rate limit even after all retries. Grow the inter-chunk
+                // delay so subsequent chunks have more room.
+                job.currentPaceMs = Math.min(8_000, Math.round(job.currentPaceMs * 1.8));
+                job.lastRateLimitedAt = Date.now();
+              } else {
+                // Adaptive pacing: success — slowly shrink the delay back
+                // toward the floor (150ms) so we don't stay slow forever.
+                if (job.currentPaceMs > 150) {
+                  job.currentPaceMs = Math.max(150, Math.round(job.currentPaceMs * 0.85));
+                }
               }
               lastModel = ext.model;
               lastProvider = ext.provider;
@@ -242,6 +271,11 @@ async function runScan(jobId: string, params: {
               const retries = drainRetryEvents(chunkId);
               if (retries.length > 0) {
                 job.retryLog.push(...retries);
+                // If retries happened but the chunk still succeeded, give a
+                // gentle extra pause — the provider is signalling strain.
+                if (!ext.failed && retries.length > 0) {
+                  job.currentPaceMs = Math.min(8_000, job.currentPaceMs + 200 * retries.length);
+                }
               }
               // Record this chunk's outcome in the event log
               job.chunkEvents.push({
@@ -280,20 +314,35 @@ async function runScan(jobId: string, params: {
             }
             job.doneChunks += 1;
             job.progress = Math.round(((ri + (ci + 1) / chunks.length) / selected.length) * 100);
-            // Small inter-chunk pause to be gentle on the LLM rate limit.
-            // The retry logic handles 429s, but pacing avoids them in the
-            // first place on large scans.
-            await new Promise((r) => setTimeout(r, 150));
+            // Adaptive inter-chunk pause — grows under rate-limit pressure,
+            // shrinks back when chunks succeed. The floor is 150ms; the
+            // ceiling is 8s. Pacing avoids 429s in the first place on large
+            // scans while keeping small scans fast.
+            await new Promise((r) => setTimeout(r, job.currentPaceMs));
           }
         }
+        if (job.cancelRequested) break;
       }
+      if (job.cancelRequested) break;
       job.doneRepos = ri + 1;
     }
 
-    job.model = lastModel;
-    job.provider = lastProvider;
-    job.phase = "aggregate";
-    job.message = "Aggregating skills…";
+    // If the user cancelled, skip aggregation of incomplete data — we'll
+    // still aggregate what we have so the user can see partial results,
+    // but mark the job status as "cancelled" instead of "completed".
+    if (job.cancelRequested) {
+      job.model = lastModel;
+      job.provider = lastProvider;
+      job.phase = "aggregate";
+      job.message = "Aggregating partial results (scan cancelled)…";
+      // Fall through to aggregation below; the cancelled-status branch
+      // after aggregateSkillMap() will mark the job as cancelled.
+    } else {
+      job.model = lastModel;
+      job.provider = lastProvider;
+      job.phase = "aggregate";
+      job.message = "Aggregating skills…";
+    }
 
     const skillMap = aggregateSkillMap({
       org: info.login,
@@ -305,6 +354,19 @@ async function runScan(jobId: string, params: {
       totalRepos: selected.length,
       totalCommits,
     });
+
+    // If the scan was cancelled mid-flight, mark it as cancelled but still
+    // return whatever partial data we collected so the user can see what
+    // was scanned before they pulled the plug.
+    if (job.cancelRequested) {
+      job.result = skillMap;
+      job.status = "cancelled";
+      job.progress = Math.round((extractions.length / Math.max(1, job.totalChunks)) * 100);
+      job.finishedAt = Date.now();
+      const okChunks = extractions.length - job.failedChunks;
+      job.message = `Cancelled — kept ${okChunks}/${extractions.length} chunks from ${job.doneRepos}/${selected.length} repos`;
+      return;
+    }
 
     job.result = skillMap;
     job.status = "completed";
@@ -356,9 +418,17 @@ async function runScan(jobId: string, params: {
       console.error("DB cache write failed:", (dbErr as Error).message);
     }
   } catch (err) {
-    job.status = "failed";
-    job.error = (err as Error).message;
-    job.message = `Failed: ${(err as Error).message}`;
+    // If the scan was cancelled and surfaced as an error here, mark it
+    // as cancelled rather than failed — the user chose to stop, not the LLM.
+    if (job.cancelRequested) {
+      job.status = "cancelled";
+      job.error = null;
+      job.message = "Cancelled by user";
+    } else {
+      job.status = "failed";
+      job.error = (err as Error).message;
+      job.message = `Failed: ${(err as Error).message}`;
+    }
     job.finishedAt = Date.now();
   }
 }
@@ -418,6 +488,9 @@ export async function POST(req: Request) {
       failedChunks: 0,
       chunkEvents: [],
       retryLog: [],
+      cancelRequested: false,
+      currentPaceMs: 150,
+      lastRateLimitedAt: null,
       result: null,
       error: null,
       startedAt: Date.now(),

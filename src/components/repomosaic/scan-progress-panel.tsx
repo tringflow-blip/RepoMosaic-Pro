@@ -15,7 +15,7 @@ export type ScanStatus = {
   branchMode: string;
   model: string;
   provider: string;
-  status: "pending" | "running" | "completed" | "failed";
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
   progress: number;
   phase: string;
   message: string;
@@ -25,6 +25,8 @@ export type ScanStatus = {
   totalChunks: number;
   doneChunks: number;
   failedChunks?: number; // chunks where LLM analysis failed (after retries)
+  /** Live adaptive inter-chunk pause (ms) — grows under rate-limit pressure. */
+  currentPaceMs?: number;
   startedAt?: number;
   finishedAt?: number | null;
   result: unknown | null;
@@ -85,6 +87,7 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
   const pct = Math.max(0, Math.min(100, status.progress));
   const done = status.status === "completed";
   const failed = status.status === "failed";
+  const cancelled = status.status === "cancelled";
   const running = status.status === "running";
   const failedChunks = status.failedChunks ?? 0;
   const okChunks = status.doneChunks - failedChunks;
@@ -93,6 +96,9 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
   const durationSec = status.startedAt
     ? Math.round(((status.finishedAt ?? Date.now()) - status.startedAt) / 1000)
     : 0;
+  // Pacing indicator — only meaningful while running
+  const paceMs = status.currentPaceMs ?? 150;
+  const isPacingUp = paceMs > 300;
 
   // ETA calculation
   let etaText: string | null = null;
