@@ -411,3 +411,54 @@ AI app), the GLM branding is gone from every user-facing surface, and
 the new hexagon-mosaic logo gives it a real identity. The sandbox default
 still needs no key, so the zero-config flow is preserved.
 
+---
+Task ID: 9-a
+Agent: style-polish-subagent
+Task: Styling polish + onboarding state
+
+Work Log:
+- Added `KeyRound` to lucide-react imports
+- Changed FeatureChip "LLM Skill Attribution" gradient from `gradient-methodology` to `gradient-sector` (icon color also changed to `text-sector`); "5 Dimensions" kept `gradient-methodology`; "Smart Caching" already used `gradient-problem`
+- Added `bg-muted/50 p-1 rounded-lg` to TabsList for better visual separation; active tab already has `shadow-sm` via shadcn TabsTrigger base styles
+- Enhanced QuickStat cards: changed `bg-muted/40` → `bg-muted/30`, added `hover:bg-muted/50 transition-colors ring-1 ring-border/30`; value was already `text-lg`
+- Enhanced FeatureChip component: added `hover:shadow-md transition-shadow ring-1 ring-border/30`, enlarged icon container from `h-7 w-7` to `h-8 w-8`; title was already `font-semibold`
+- Added "How it works" onboarding section below the feature chips, visible only when `!githubUser && !ownerInfo`, with 3 steps (Connect GitHub / Scan commits / Explore skills) using KeyRound, Cable, and Network icons
+- Added `hover:scale-105 transition-transform cursor-pointer` to header logo wrapper div
+- Added `shadow-sm` to header alongside existing `border-b`
+- Replaced Network icon in footer with a tiny `h-4 w-4 rounded gradient-sector` div before "RepoMosaic Pro"
+- Ran `bun run lint` — 0 errors
+
+Stage Summary:
+- All 7 styling polish items applied to `src/app/page.tsx`
+- Lint clean, dev server healthy
+- Onboarding "How it works" section shows for first-time visitors with 3-step visual guide
+
+---
+Task ID: 9-b
+Agent: keyboard-shortcuts-subagent
+Task: Keyboard shortcuts overlay + scan progress enhancements
+
+Work Log:
+- Added `showShortcuts` state to page.tsx
+- Added `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription` imports from `@/components/ui/dialog`
+- Added `?` key handler in the keyboard useEffect that toggles `showShortcuts` state
+- Added Escape key handling to close the shortcuts overlay when it's open (before other Escape handlers)
+- Created Dialog-based keyboard shortcuts overlay with 4 shortcuts: 1-9 (switch tabs), ? (show help), Esc (close panels), / (focus search)
+- Added clickable `?` button in footer next to the existing keyboard shortcut hint kbd elements
+- Improved the 1-9 tab switching handler: unified the previously split logic (non-skillMap vs skillMap) into a single unified handler using the full tabs array with guard conditions
+- Added `SELECT` to the input guard (alongside INPUT, TEXTAREA, isContentEditable) so keyboard shortcuts don't fire when a select dropdown is focused
+- Enhanced scan-progress-panel.tsx with:
+  - **Estimated time remaining**: tracks elapsed time via `Date.now()` and 1-second interval timer while scan is running; calculates rate (doneRepos/elapsedSec) and estimates remaining repos/rate; displays as Badge with Clock icon
+  - **Progress phase indicator**: 4-step horizontal step indicator (Fetching commits → Analyzing with LLM → Aggregating results → Complete) with completed/current/pending states, numbered circles, connecting lines, and color coding (emerald for completed, primary for current, muted for pending)
+  - **Cancel scan button**: red-outlined button visible only when scan is running; calls `onCancel` prop if provided, otherwise shows toast "Scan cancellation not yet implemented"
+- Added `onCancel` optional prop to ScanProgressPanel Props type
+- Added `useToast` import and `Clock`, `XCircle` icon imports to scan-progress-panel
+- Added `useState`, `useEffect` imports for the ETA timer
+- Ran `bun run lint` — 0 errors, dev server healthy
+
+Stage Summary:
+- Keyboard shortcuts help overlay fully functional: press `?` to toggle, `Escape` to close
+- Footer has clickable `?` button to open the overlay
+- Number keys 1-9 work uniformly for tab switching with proper guards
+- Scan progress panel shows ETA, phase step indicator, and cancel button
+- All changes lint-clean, dev server compiles without errors

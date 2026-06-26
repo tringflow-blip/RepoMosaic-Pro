@@ -9,6 +9,7 @@ import {
   Github,
   Sparkles,
   Cable,
+  KeyRound,
   Boxes,
   Users,
   BarChart3,
@@ -40,6 +41,7 @@ import { AdvancedSkillGraph } from "@/components/graphs/advanced-skill-graph";
 import { PersonDetailPanel } from "@/components/repomosaic/person-detail-panel";
 import { CommitHeatmap } from "@/components/repomosaic/commit-heatmap";
 import { SkillComparison } from "@/components/repomosaic/skill-comparison";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
 import type { AdvancedSkillMap, PersonSkillRecord } from "@/lib/analysis/skill-taxonomy";
@@ -77,6 +79,8 @@ export default function Home() {
   const [compareRequest, setCompareRequest] = useState<string>("");
   // Person detail panel
   const [selectedPerson, setSelectedPerson] = useState<PersonSkillRecord | null>(null);
+  // Keyboard shortcuts overlay
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -280,14 +284,21 @@ export default function Home() {
   // panel, "/" focuses the People-tab search box.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      // Don't trigger when typing in inputs/textareas
+      // Don't trigger when typing in inputs/textareas/selects
       const target = e.target as HTMLElement;
-      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) {
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)) {
         if (e.key === "Escape" && target.blur) target.blur();
         return;
       }
       if (e.key === "Escape") {
+        if (showShortcuts) { setShowShortcuts(false); return; }
         if (selectedPerson) setSelectedPerson(null);
+        return;
+      }
+      // "?" toggles shortcuts overlay
+      if (e.key === "?") {
+        setShowShortcuts((prev) => !prev);
+        e.preventDefault();
         return;
       }
       // "/" focuses the People-tab search box
@@ -302,34 +313,29 @@ export default function Home() {
         }
       }
       // Tab switching with 1-9
-      if (!skillMap && (e.key === "1" || e.key === "2")) {
-        if (e.key === "1") setActiveTab("setup");
-        if (e.key === "2" && ownerInfo) setActiveTab("repos");
-        return;
-      }
-      if (skillMap) {
-        const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights"];
-        const idx = parseInt(e.key, 10) - 1;
-        if (idx >= 0 && idx < tabs.length) {
-          const targetTab = tabs[idx];
-          if ((targetTab === "repos" || targetTab === "scan") && !ownerInfo) return;
-          if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights") && !skillMap) return;
-          setActiveTab(targetTab);
-          e.preventDefault();
-        }
+      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights"];
+      const idx = parseInt(e.key, 10) - 1;
+      if (idx >= 0 && idx < tabs.length) {
+        const targetTab = tabs[idx];
+        // Guard: repos/scan require ownerInfo
+        if ((targetTab === "repos" || targetTab === "scan") && !ownerInfo) return;
+        // Guard: graph/people/analytics/activity/compare/insights require skillMap
+        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights") && !skillMap) return;
+        setActiveTab(targetTab);
+        e.preventDefault();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [skillMap, ownerInfo, selectedPerson]);
+  }, [skillMap, ownerInfo, selectedPerson, showShortcuts]);
 
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-md sticky top-0 z-10">
+      <header className="border-b shadow-sm bg-background/80 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-soft ring-1 ring-border/40">
+            <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-soft ring-1 ring-border/40 hover:scale-105 transition-transform cursor-pointer">
               <img
                 src="/logo.png"
                 alt="RepoMosaic Pro logo"
@@ -377,7 +383,7 @@ export default function Home() {
       {/* Main */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-5 flex-wrap h-auto">
+          <TabsList className="mb-5 flex-wrap h-auto bg-muted/50 p-1 rounded-lg">
             <TabsTrigger value="setup" className="text-xs">
               <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Setup
             </TabsTrigger>
@@ -421,10 +427,10 @@ export default function Home() {
               />
               <div className="mt-4 grid sm:grid-cols-3 gap-3">
                 <FeatureChip
-                  icon={<Cable className="h-4 w-4 text-methodology" />}
+                  icon={<Cable className="h-4 w-4 text-sector" />}
                   title="LLM Skill Attribution"
                   desc="Each commit chunk → multi-dim JSON tags"
-                  gradient="gradient-methodology"
+                  gradient="gradient-sector"
                 />
                 <FeatureChip
                   icon={<Boxes className="h-4 w-4 text-methodology" />}
@@ -439,6 +445,35 @@ export default function Home() {
                   gradient="gradient-problem"
                 />
               </div>
+              {/* Welcome / Onboarding for first-time visitors */}
+              {!githubUser && !ownerInfo && (
+                <div className="mt-6 rounded-xl border border-dashed border-border/60 bg-muted/20 p-5 space-y-4">
+                  <h3 className="text-sm font-semibold text-center">How it works</h3>
+                  <div className="grid sm:grid-cols-3 gap-4 text-center">
+                    <div className="space-y-1.5">
+                      <div className="h-10 w-10 rounded-full bg-sector/10 text-sector flex items-center justify-center mx-auto">
+                        <KeyRound className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-medium">1. Connect GitHub</p>
+                      <p className="text-[10px] text-muted-foreground">Paste a personal access token and pick an org or user</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-10 w-10 rounded-full bg-methodology/10 text-methodology flex items-center justify-center mx-auto">
+                        <Cable className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-medium">2. Scan commits</p>
+                      <p className="text-[10px] text-muted-foreground">Select repos and run the skill attribution scan</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="h-10 w-10 rounded-full bg-tech/10 text-tech flex items-center justify-center mx-auto">
+                        <Network className="h-5 w-5" />
+                      </div>
+                      <p className="text-xs font-medium">3. Explore skills</p>
+                      <p className="text-[10px] text-muted-foreground">Browse the skill graph, compare people, export reports</p>
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Quick Stats Banner when data is loaded */}
               {skillMap && (
                 <div className="mt-4 rounded-xl border bg-card p-4 shadow-soft animate-fade-in-up">
@@ -704,7 +739,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <Network className="h-3 w-3 text-sector" />
+              <div className="h-4 w-4 rounded gradient-sector shrink-0" />
               <span className="font-medium">RepoMosaic Pro</span>
               <span className="text-border">·</span>
               <span>Skill Attribution</span>
@@ -719,6 +754,13 @@ export default function Home() {
               <kbd className="font-mono text-[9px] px-1 py-0.5 rounded border bg-muted">1-9</kbd>
               <kbd className="font-mono text-[9px] px-1 py-0.5 rounded border bg-muted">/</kbd>
               <kbd className="font-mono text-[9px] px-1 py-0.5 rounded border bg-muted">Esc</kbd>
+              <button
+                onClick={() => setShowShortcuts(true)}
+                className="ml-0.5 h-4 w-4 rounded border bg-muted flex items-center justify-center hover:bg-accent transition-colors cursor-pointer"
+                aria-label="Show keyboard shortcuts"
+              >
+                <span className="text-[9px] font-mono font-bold">?</span>
+              </button>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -737,6 +779,35 @@ export default function Home() {
         person={selectedPerson}
         onClose={() => setSelectedPerson(null)}
       />
+
+      {/* Keyboard Shortcuts Help Overlay */}
+      <Dialog open={showShortcuts} onOpenChange={setShowShortcuts}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Keyboard className="h-4 w-4" /> Keyboard Shortcuts
+            </DialogTitle>
+            <DialogDescription>Quick navigation and actions</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 text-sm">
+            {[
+              { keys: ["1-9"], desc: "Switch tabs" },
+              { keys: ["?"], desc: "Show this help" },
+              { keys: ["Esc"], desc: "Close panels / dialog" },
+              { keys: ["/"], desc: "Focus search (on tabs that have it)" },
+            ].map((s) => (
+              <div key={s.desc} className="flex items-center justify-between py-1">
+                <span className="text-muted-foreground">{s.desc}</span>
+                <div className="flex gap-1">
+                  {s.keys.map((k) => (
+                    <kbd key={k} className="font-mono text-[10px] px-1.5 py-0.5 rounded border bg-muted">{k}</kbd>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -747,9 +818,9 @@ export default function Home() {
 
 function FeatureChip({ icon, title, desc, gradient }: { icon: React.ReactNode; title: string; desc: string; gradient: string }) {
   return (
-    <div className="rounded-xl border bg-card p-4 card-elevated animate-fade-in-up">
+    <div className="rounded-xl border bg-card p-4 card-elevated animate-fade-in-up hover:shadow-md transition-shadow ring-1 ring-border/30">
       <div className="flex items-center gap-2.5 mb-1.5">
-        <div className={`h-7 w-7 rounded-lg ${gradient} flex items-center justify-center text-white shrink-0`}>
+        <div className={`h-8 w-8 rounded-lg ${gradient} flex items-center justify-center text-white shrink-0`}>
           {icon}
         </div>
         <span className="text-xs font-semibold">{title}</span>
@@ -761,7 +832,7 @@ function FeatureChip({ icon, title, desc, gradient }: { icon: React.ReactNode; t
 
 function QuickStat({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
-    <div className="rounded-lg bg-muted/40 px-3 py-2 text-center">
+    <div className="rounded-lg bg-muted/30 px-3 py-2 text-center hover:bg-muted/50 transition-colors ring-1 ring-border/30">
       <div className={`flex items-center justify-center gap-1 ${color}`}>
         {icon}
         <span className="text-lg font-bold tabular-nums">{value}</span>
