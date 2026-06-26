@@ -294,3 +294,120 @@ The upgraded RepoMosaic-Pro is now publicly available at:
 
 The original repo is preserved. The new repo contains only source code, config,
 screenshots, and documentation — no secrets, no runtime data, no dev clutter.
+
+---
+
+## Phase 8: Rebrand + Multi-Provider LLM Connection + Logo (2025-06-26)
+
+### Task
+User requested three cleanups:
+1. Give the app a real logo (the current gradient icon block was too basic).
+2. Remove every mention of "GLM" / "GLM-powered" / "Advanced Skill Map" from the UI.
+3. Redesign the LLM connection UI:
+   - Rename "LLM Skill" → "LLM Connection", fix the icon.
+   - Drop the "default GLM" / "OpenAI-compatible" tab split.
+   - Replace the free-form base URL field with a **provider dropdown** (OpenAI,
+     Anthropic, Google, …) where each provider already knows its own URL.
+   - Add a **model dropdown** populated per-provider (no more typing model names).
+   - API key should be **optional** (sandbox default + local Ollama need no key).
+   - Keep a "test connection" button.
+
+### Completed Modifications
+
+#### 1. Logo (image-generation skill)
+- Generated `public/logo.png` (1024×1024) via `z-ai image` CLI.
+- Concept: 7 interconnected colorful hexagons in a cluster (orange, teal,
+  purple, blue, red…) on white — a "skill mosaic" with interconnected nodes.
+- Integrated into the page header (replaces the `gradient-sector` icon block)
+  and set as the favicon + apple icon in `layout.tsx` metadata.
+
+#### 2. Branding cleanup (no more GLM / Advanced Skill Map)
+| Location | Before | After |
+|---|---|---|
+| `<title>` | "RepoMosaic Pro — Advanced Skill Map" | "RepoMosaic Pro — Skill Attribution" |
+| Header subtitle | "GLM-powered multi-dimensional skill attribution per committer" | "Multi-dimensional skill attribution for GitHub organizations" |
+| Setup tab label | "LLM Skill" (Sparkles icon) | "LLM Connection" (Cable icon) |
+| Feature chip | "GLM Skill Extractor · Each commit chunk → multi-dim JSON via GLM-4" | "LLM Skill Attribution · Each commit chunk → multi-dim JSON tags" |
+| Footer | "GLM (default)" / "Built with ♥ & GLM" | "provider / model" / "Built with ♥ for engineering teams" |
+| Footer label | "Advanced Skill Map" | "Skill Attribution" |
+| Export MD header | "# Advanced Skill Map — {org}" | "# Skill Attribution Report — {org}" |
+| Graph evidence | "Commit-level evidence from GLM" | "Commit-level evidence" |
+| Code comments | "GLM skill extractor" / "GLM model" / "GLM's tendency" | "skill extractor" / "the model" / "the model's tendency" |
+| Default config | `provider: "glm", model: "glm"` | `provider: "zai", model: "glm-4-plus"` |
+
+The model *id* `glm-4-plus` is kept (it's the actual model name in the Z.ai
+catalog, not branding), but no user-facing string says "GLM" anymore.
+
+#### 3. Provider catalog (`src/lib/llm/providers.ts`, NEW)
+A curated catalog of 9 OpenAI-compatible providers. Each carries its own
+preset base URL, auth scheme, model list, and key requirement — so the user
+never types a URL or model name.
+
+| Provider | Base URL | Auth | Key? | Default model |
+|---|---|---|---|---|
+| **Z.ai** (sandbox default) | (SDK) | bearer | no | glm-4-plus |
+| OpenAI | api.openai.com/v1 | bearer | yes | gpt-4o-mini |
+| Anthropic | api.anthropic.com/v1 | x-api-key + version header | yes | claude-3-5-sonnet-latest |
+| Google | generativelanguage.googleapis.com/v1beta/openai | bearer | yes | gemini-1.5-flash |
+| Mistral | api.mistral.ai/v1 | bearer | yes | mistral-small-latest |
+| DeepSeek | api.deepseek.com/v1 | bearer | yes | deepseek-chat |
+| Groq | api.groq.com/openai/v1 | bearer | yes | llama-3.3-70b-versatile |
+| Together | api.together.xyz/v1 | bearer | yes | Llama-3.3-70B-Instruct-Turbo |
+| Ollama (local) | localhost:11434/v1 | bearer (dummy) | no | llama3.1:8b |
+
+`normalizeProvider()` maps legacy `"glm"` → `"zai"` and `"openai-compatible"`
+→ `"openai"` so cached scans from before this change still load.
+
+#### 4. Setup panel LLM Connection redesign
+Replaced the two-tab (GLM / OpenAI-compatible) split with:
+- **Provider dropdown** (Select) — lists all 9 providers with tagline + "no
+  key" badge for sandbox/local.
+- **Model dropdown** (Select) — auto-populates from the selected provider's
+  catalog. Switching provider resets the model to that provider's default.
+  Falls back to a "custom" entry if the stored model isn't in the catalog.
+- **API key field** — placeholder adapts ("Paste your OpenAI key…" vs
+  "Optional — leave blank to use the default"). Shows a "get key" external
+  link for hosted providers. Hidden ShieldCheck hint for no-key providers.
+- **Provider info card** — shows the preset base URL + temp/dimensions/JSON
+  badges + auth scheme badge (x-api-key for Anthropic).
+- **Test connection button** — calls `POST /api/settings` which runs
+  `pingLLM()`; shows green "Connection verified — ready to scan" or red
+  "Connection failed — check the key or provider".
+
+#### 5. Skill extractor backend (`skill-extractor.ts`)
+- `callLLM()` rewritten to route via the provider catalog instead of the
+  hardcoded `glm` / `openai-compatible` branch.
+- Auth header chosen by `provider.authScheme` (bearer vs x-api-key).
+- Anthropic extra headers (`anthropic-version: 2023-06-01`) applied
+  automatically from the catalog.
+- `response_format: { type: "json_object" }` disabled for Anthropic (their
+  OpenAI-compatible gateway rejects it).
+- Local providers (Ollama) accept a dummy `"ollama"` key when none provided.
+- `callGLMWithRetry` renamed `callSDKWithRetry`; retry logger prefix
+  `glm-retry` → `llm-retry`.
+- Default model id updated `glm` → `glm-4-plus` in `extractSkillsForChunk`
+  and in the scan/settings API fallbacks.
+
+### Verification Results (agent-browser + VLM)
+- ✅ Lint clean (`eslint .` passes with 0 errors)
+- ✅ Dev server 200 on `/`, `POST /api/settings` 200
+- ✅ Header shows logo + "RepoMosaic Pro" + new tagline, **no GLM text**
+- ✅ LLM Connection tab opens; provider dropdown lists all 9 providers
+  (Z.ai, OpenAI, Anthropic, Google, Mistral, DeepSeek, Groq, Together,
+  Ollama) — confirmed via `[role=option]` DOM inspection
+- ✅ Switching to OpenAI auto-selects "GPT-4o mini", shows
+  `https://api.openai.com/v1` in the info card, "Paste your OpenAI key…"
+  placeholder, and a "get key" link
+- ✅ Switching back to Z.ai hides the key requirement and shows "Sandbox
+  default — runs through the pre-authenticated SDK"
+- ✅ Test connection on Z.ai default → green "Connection verified"
+- ✅ Logo served at `/logo.png` (200, image/png)
+- ✅ Committed `c3b36e1` and pushed to GitHub
+
+### Stage Summary
+The app is now a clean, provider-agnostic skill attribution tool. The
+LLM connection is a standard provider/model/key picker (like any modern
+AI app), the GLM branding is gone from every user-facing surface, and
+the new hexagon-mosaic logo gives it a real identity. The sandbox default
+still needs no key, so the zero-config flow is preserved.
+
