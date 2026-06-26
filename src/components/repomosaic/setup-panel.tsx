@@ -97,6 +97,20 @@ export function SetupPanel({
   const currentModel = setup.llmConfig.model || providerInfo.defaultModel;
   const modelExistsInCatalog = models.some((m) => m.id === currentModel);
 
+  // Static accent → bg-class map so Tailwind can statically detect all classes.
+  const ACCENT_DOT: Record<string, string> = {
+    violet: "bg-violet-500",
+    emerald: "bg-emerald-500",
+    amber: "bg-amber-500",
+    rose: "bg-rose-500",
+    orange: "bg-orange-500",
+    blue: "bg-blue-500",
+    fuchsia: "bg-fuchsia-500",
+    teal: "bg-teal-500",
+    slate: "bg-slate-500",
+  };
+  const providerDot = ACCENT_DOT[providerInfo.accent] ?? "bg-teal-500";
+
   const handleVerifyGithub = async () => {
     if (!setup.githubToken) {
       toast({ title: "Token required", description: "Paste a GitHub personal access token.", variant: "destructive" });
@@ -181,11 +195,11 @@ export function SetupPanel({
       </CardHeader>
       <CardContent className="space-y-5">
         <Tabs defaultValue="github">
-          <TabsList className="w-full">
-            <TabsTrigger value="github" className="flex-1 text-xs">
+          <TabsList className="w-full bg-muted/50 p-1">
+            <TabsTrigger value="github" className="flex-1 text-xs transition-all">
               <Github className="h-3 w-3 mr-1.5" /> GitHub
             </TabsTrigger>
-            <TabsTrigger value="llm" className="flex-1 text-xs">
+            <TabsTrigger value="llm" className="flex-1 text-xs transition-all">
               <Cable className="h-3 w-3 mr-1.5" /> LLM Connection
             </TabsTrigger>
           </TabsList>
@@ -258,8 +272,8 @@ export function SetupPanel({
             <Button
               onClick={onLoadRepos}
               disabled={!ready}
-              className="w-full active-scale"
               size="sm"
+              className="w-full h-10 active-scale transition-all duration-200 bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md"
             >
               {ready ? (
                 <>
@@ -307,7 +321,7 @@ export function SetupPanel({
                         <span className="font-medium">{p.label}</span>
                         <span className="text-muted-foreground text-[10px]">· {p.tagline}</span>
                         {p.sandboxDefault && (
-                          <Badge variant="outline" className="text-[8px] py-0 px-1 ml-1 border-methodology/40 text-methodology">
+                          <Badge variant="outline" className="text-[9px] py-0.5 px-1.5 ml-1 bg-emerald-500/15 text-emerald-700 border-emerald-500/30 font-semibold">
                             no key
                           </Badge>
                         )}
@@ -358,8 +372,8 @@ export function SetupPanel({
                   )}
                 </SelectContent>
               </Select>
-              <p className="text-[10px] text-muted-foreground font-mono truncate">
-                id: <span className="text-foreground/70">{currentModel}</span>
+              <p className="text-[11px] text-foreground/60 font-mono truncate px-2 py-1 rounded bg-muted/50 inline-block">
+                id: <span className="text-foreground/80 font-medium">{currentModel}</span>
               </p>
             </div>
 
@@ -374,7 +388,7 @@ export function SetupPanel({
                     href={providerInfo.keyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[10px] text-methodology hover:underline flex items-center gap-0.5"
+                    className="text-[10px] font-medium text-amber-600 hover:text-amber-700 hover:underline flex items-center gap-0.5"
                   >
                     get key <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -392,7 +406,11 @@ export function SetupPanel({
                   onChange={(e) =>
                     setSetup({ ...setup, llmConfig: { ...setup.llmConfig, apiKey: e.target.value } })
                   }
-                  className="pr-9 font-mono text-xs h-9 focus-ring"
+                  className={cn(
+                    "pr-9 font-mono text-xs h-9 focus-ring",
+                    providerInfo.requiresKey && !setup.llmConfig.apiKey &&
+                      "ring-1 ring-amber-500/20"
+                  )}
                 />
                 <button
                   type="button"
@@ -413,9 +431,12 @@ export function SetupPanel({
             </div>
 
             {/* Provider info card */}
-            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-muted/40 border border-border/60 animate-fade-in-up">
+            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-gradient-to-br from-muted/60 to-muted/30 border border-border/80 border-l-4 border-l-teal-500/60 animate-fade-in-up">
               <div className="flex items-center justify-between gap-2">
-                <span className="font-medium text-foreground text-xs">{providerInfo.label}</span>
+                <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                  <span className={cn("h-1.5 w-1.5 rounded-full", providerDot)} />
+                  {providerInfo.label}
+                </span>
                 <span className="text-[10px]">{providerInfo.tagline}</span>
               </div>
               {providerInfo.baseURL && (
@@ -444,9 +465,8 @@ export function SetupPanel({
             <Button
               onClick={handlePingLLM}
               disabled={pingingLLM}
-              variant="outline"
               size="sm"
-              className="w-full active-scale"
+              className="w-full h-10 active-scale bg-gradient-to-r from-teal-500 to-emerald-500 text-white hover:from-teal-600 hover:to-emerald-600 shadow-sm hover:shadow-md transition-all duration-200"
             >
               {pingingLLM ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
@@ -458,8 +478,10 @@ export function SetupPanel({
             {llmOk !== null && (
               <div
                 className={cn(
-                  "text-xs flex items-center gap-1.5 animate-fade-in-up",
-                  llmOk ? "text-emerald-600" : "text-destructive"
+                  "text-xs flex items-center gap-1.5 animate-fade-in-up px-3 py-1.5 rounded-lg border w-fit",
+                  llmOk
+                    ? "text-emerald-700 bg-emerald-500/10 border-emerald-500/20"
+                    : "text-destructive bg-destructive/10 border-destructive/20"
                 )}
               >
                 {llmOk ? (

@@ -41,6 +41,7 @@ import { AdvancedSkillGraph } from "@/components/graphs/advanced-skill-graph";
 import { PersonDetailPanel } from "@/components/repomosaic/person-detail-panel";
 import { CommitHeatmap } from "@/components/repomosaic/commit-heatmap";
 import { SkillComparison } from "@/components/repomosaic/skill-comparison";
+import { PdfExportButton } from "@/components/repomosaic/pdf-export-button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
@@ -179,6 +180,32 @@ export default function Home() {
     }
   }, [branchMode, commitsPerChunk, maxCommitsPerRepo, selectedRepos, setup, toast]);
 
+  // Cancel a running scan — calls POST /api/scan/cancel which sets a flag the
+  // scan loop checks between chunks. Partial results are still aggregated.
+  const cancelScan = useCallback(async () => {
+    if (!scanId) return;
+    try {
+      const r = await fetch("/api/scan/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: scanId }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (data.alreadyDone) {
+        toast({ title: "Scan already finished", description: `Status: ${data.status}` });
+      } else if (r.ok) {
+        toast({
+          title: "Cancelling scan…",
+          description: "Finishing current chunk, then aggregating partial results.",
+        });
+      } else {
+        toast({ title: "Cancel failed", description: data.error ?? "Unknown error", variant: "destructive" });
+      }
+    } catch (err) {
+      toast({ title: "Cancel failed", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [scanId, toast]);
+
   // Poll scan status
   useEffect(() => {
     if (!scanId) return;
@@ -199,6 +226,17 @@ export default function Home() {
             pollRef.current = null;
           }
         } else if (s.status === "failed") {
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+        } else if (s.status === "cancelled") {
+          // Scan was cancelled by the user — load partial results if any,
+          // and stop polling. Stay on the scan tab so the user sees the
+          // cancellation message and can navigate manually.
+          if (s.result) {
+            setSkillMap(s.result as AdvancedSkillMap);
+          }
           if (pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
@@ -524,10 +562,15 @@ export default function Home() {
 
           <TabsContent value="scan">
             <div className="max-w-2xl mx-auto space-y-4">
-              <ScanProgressPanel status={scanStatus} />
+              <ScanProgressPanel status={scanStatus} onCancel={cancelScan} />
               {scanStatus?.status === "completed" && skillMap && (
                 <Button className="w-full active-scale" onClick={() => setActiveTab("graph")}>
                   View skill graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                </Button>
+              )}
+              {scanStatus?.status === "cancelled" && skillMap && (
+                <Button variant="outline" className="w-full active-scale border-amber-500/50 text-amber-700 hover:bg-amber-500/10" onClick={() => setActiveTab("graph")}>
+                  View partial results <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               )}
             </div>
@@ -573,13 +616,18 @@ export default function Home() {
 
           <TabsContent value="analytics">
             {skillMap ? (
-              <AnalyticsPanel
-                skillMap={skillMap}
-                onComparePair={(a, b) => {
-                  setCompareRequest(`${a}|${b}:${Date.now()}`);
-                  setActiveTab("graph");
-                }}
-              />
+              <div className="space-y-4">
+                <div className="flex items-center justify-end gap-2">
+                  <PdfExportButton skillMap={skillMap} />
+                </div>
+                <AnalyticsPanel
+                  skillMap={skillMap}
+                  onComparePair={(a, b) => {
+                    setCompareRequest(`${a}|${b}:${Date.now()}`);
+                    setActiveTab("graph");
+                  }}
+                />
+              </div>
             ) : (
               <EmptyState
                 icon={<BarChart3 className="h-6 w-6" />}
@@ -981,7 +1029,7 @@ function PeopleTable({
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto">
+      <div className="overflow-x-auto hidden md:block">
         <table className="w-full text-xs">
           <thead className="bg-muted/60 sticky top-0 z-10 backdrop-blur-sm">
             <tr className="text-left">
@@ -1081,6 +1129,80 @@ function PeopleTable({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile card view — shown below the md breakpoint */}
+      <div className="md:hidden divide-y bg-card">
+        {filteredPeople.map((p) => {
+          const pct = (p.totalCommits / maxCommits) * 100;
+          return (
+            <button
+              key={p.login}
+              onClick={() => focusPerson(p)}
+              className="w-full text-left p-3 hover:bg-muted/40 active:bg-muted/60 transition-colors"
+            >
+              {/* Header: avatar + name + stats */}
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <Avatar className="h-10 w-10 shrink-0 ring-1 ring-border/60">
+                  <AvatarImage src={p.avatarUrl} />
+                  <AvatarFallback className="text-xs">{p.login[0]?.toUpperCase()}</AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-sm truncate" title={p.name || p.login}>
+                    {p.name || p.login}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground truncate">@{p.login}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-mono font-semibold text-sm tabular-nums">{p.totalCommits}</div>
+                  <div className="text-[9px] text-muted-foreground uppercase tracking-wide">commits</div>
+                </div>
+              </div>
+
+              {/* Commit bar */}
+              <div className="h-1 rounded-full bg-muted overflow-hidden mb-2.5">
+                <div className="h-full bg-people" style={{ width: `${pct}%` }} />
+              </div>
+
+              {/* Stats row */}
+              <div className="flex items-center gap-3 mb-2.5 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <GitCommit className="h-2.5 w-2.5" />
+                  <span className="font-mono tabular-nums">{p.totalChunks}</span> chunks
+                </span>
+                <span className="flex items-center gap-1">
+                  <Boxes className="h-2.5 w-2.5" />
+                  <span className="font-mono tabular-nums">{p.repos.length}</span> repos
+                </span>
+              </div>
+
+              {/* Skill chips — compact */}
+              {p.sectors.length > 0 && (
+                <div className="mb-1.5">
+                  <div className="text-[9px] uppercase tracking-wide text-sector font-semibold mb-1">Sectors</div>
+                  <SkillChipList items={p.sectors} variant="sector" max={2} />
+                </div>
+              )}
+              {p.tech.length > 0 && (
+                <div className="mb-1.5">
+                  <div className="text-[9px] uppercase tracking-wide text-tech font-semibold mb-1">Tech</div>
+                  <SkillChipList items={p.tech} variant="tech" max={3} />
+                </div>
+              )}
+              {p.roles.length > 0 && (
+                <div>
+                  <div className="text-[9px] uppercase tracking-wide text-role font-semibold mb-1">Roles</div>
+                  <SkillChipList items={p.roles} variant="role" max={2} />
+                </div>
+              )}
+            </button>
+          );
+        })}
+        {filteredPeople.length === 0 && (
+          <div className="p-6 text-center text-muted-foreground text-sm">
+            {query ? `No contributors match "${query}"` : "No people detected."}
+          </div>
+        )}
       </div>
     </div>
   );

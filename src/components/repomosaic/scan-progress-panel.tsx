@@ -1,12 +1,25 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, CheckCircle2, AlertCircle, Cpu, Layers, GitCommit, Gauge, Zap, Download, FileText, Clock, XCircle } from "lucide-react";
+import { Loader2, CheckCircle2, AlertCircle, Cpu, Layers, GitCommit, Gauge, Zap, Download, FileText, Clock, XCircle, Terminal, Tag } from "lucide-react";
+
+/** Per-chunk outcome — populated by the scan loop as each chunk is analyzed. */
+export type ChunkEvent = {
+  chunkId: string;
+  repo: string;
+  author: string;
+  status: "ok" | "failed";
+  model: string;
+  provider: string;
+  error?: string;
+  tags: number;
+  timestamp: number;
+};
 
 export type ScanStatus = {
   id: string;
@@ -31,6 +44,8 @@ export type ScanStatus = {
   finishedAt?: number | null;
   result: unknown | null;
   error: string | null;
+  /** Per-chunk outcome log — populated live during the scan. */
+  chunkEvents?: ChunkEvent[];
 };
 
 type Props = {
@@ -328,6 +343,9 @@ export function ScanProgressPanel({ status, onCancel }: Props) {
           </div>
         )}
 
+        {/* Live chunk event log — shows each chunk as it's analyzed */}
+        <LiveChunkLog events={status.chunkEvents ?? []} running={running} />
+
         {/* Cancel scan button */}
         {running && (
           <div className="flex justify-end">
@@ -362,4 +380,119 @@ function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; 
 // Local cn to avoid circular import edge-cases in this isolated component.
 function cn(...classes: (string | false | undefined | null)[]): string {
   return classes.filter(Boolean).join(" ");
+}
+
+/** Live chunk event log — a terminal-style scrollable list that shows each
+ *  chunk as it's analyzed by the LLM. Auto-scrolls to the bottom when new
+ *  events arrive. Hidden entirely when there are no events yet. */
+function LiveChunkLog({ events, running }: { events: ChunkEvent[]; running: boolean }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [autoScroll, setAutoScroll] = useState(true);
+
+  // Auto-scroll to bottom when new events arrive (only if user hasn't scrolled up)
+  useEffect(() => {
+    if (autoScroll && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [events.length, autoScroll]);
+
+  const handleScroll = () => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    // If user is near the bottom (within 40px), keep auto-scrolling
+    const atBottom = scrollHeight - scrollTop - clientHeight < 40;
+    setAutoScroll(atBottom);
+  };
+
+  if (events.length === 0) return null;
+
+  // Show the most recent 200 events (keep memory bounded on huge scans)
+  const recent = events.slice(-200);
+  const okCount = events.filter((e) => e.status === "ok").length;
+  const failCount = events.filter((e) => e.status === "failed").length;
+
+  return (
+    <div className="rounded-lg border bg-zinc-950 text-zinc-300 overflow-hidden">
+      {/* Header bar */}
+      <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/80 border-b border-zinc-800">
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400">
+          <Terminal className="h-3 w-3" />
+          <span>Live LLM analysis log</span>
+          {running && (
+            <span className="flex items-center gap-1 ml-2 text-emerald-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              streaming
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-[10px] font-mono">
+          <span className="text-emerald-400">{okCount} ok</span>
+          {failCount > 0 && <span className="text-red-400">{failCount} failed</span>}
+          <span className="text-zinc-600">·</span>
+          <span className="text-zinc-500">{events.length} total</span>
+        </div>
+      </div>
+
+      {/* Scrollable log area */}
+      <div
+        ref={scrollRef}
+        onScroll={handleScroll}
+        className="max-h-48 overflow-y-auto custom-scrollbar font-mono text-[10.5px] leading-relaxed p-2 space-y-0.5"
+      >
+        {recent.map((ev, idx) => {
+          const time = new Date(ev.timestamp);
+          const timeStr = time.toLocaleTimeString("en-US", { hour12: false }) + "." + String(time.getMilliseconds()).padStart(3, "0").slice(0, 2);
+          const isFail = ev.status === "failed";
+          return (
+            <div
+              key={`${ev.chunkId}-${idx}`}
+              className={cn(
+                "flex items-start gap-2 px-1.5 py-0.5 rounded hover:bg-zinc-800/50 transition-colors",
+                isFail && "bg-red-950/20"
+              )}
+            >
+              <span className="text-zinc-600 shrink-0 tabular-nums">{timeStr}</span>
+              <span className={cn("shrink-0 font-bold", isFail ? "text-red-400" : "text-emerald-400")}>
+                {isFail ? "FAIL" : " OK "}
+              </span>
+              <span className="text-sky-300 shrink-0 truncate max-w-[120px]">{ev.repo}</span>
+              <span className="text-zinc-600 shrink-0">/</span>
+              <span className="text-amber-300 shrink-0 truncate max-w-[100px]">{ev.author}</span>
+              <span className="text-zinc-600 shrink-0">→</span>
+              {isFail ? (
+                <span className="text-red-300 truncate">{ev.error ?? "unknown error"}</span>
+              ) : (
+                <span className="text-zinc-400 flex items-center gap-1">
+                  <Tag className="h-2.5 w-2.5 text-purple-400" />
+                  <span className="text-purple-300 font-semibold">{ev.tags}</span>
+                  <span className="text-zinc-600">tags</span>
+                  <span className="text-zinc-700 ml-1">· {ev.provider}/{ev.model}</span>
+                </span>
+              )}
+            </div>
+          );
+        })}
+        {running && (
+          <div className="flex items-center gap-2 px-1.5 py-0.5 text-zinc-500">
+            <span className="text-zinc-600 tabular-nums">…</span>
+            <Loader2 className="h-2.5 w-2.5 animate-spin text-emerald-400" />
+            <span className="text-[10px]">analyzing next chunk…</span>
+          </div>
+        )}
+      </div>
+
+      {/* Auto-scroll indicator */}
+      {!autoScroll && (
+        <button
+          onClick={() => {
+            setAutoScroll(true);
+            if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+          }}
+          className="w-full text-center py-1 text-[10px] text-emerald-400 hover:bg-zinc-800/50 transition-colors border-t border-zinc-800"
+        >
+          ↓ Jump to latest
+        </button>
+      )}
+    </div>
+  );
 }
