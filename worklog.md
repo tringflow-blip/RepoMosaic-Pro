@@ -462,3 +462,98 @@ Stage Summary:
 - Number keys 1-9 work uniformly for tab switching with proper guards
 - Scan progress panel shows ETA, phase step indicator, and cancel button
 - All changes lint-clean, dev server compiles without errors
+
+---
+
+## Phase 9: Styling Polish + Onboarding + Keyboard Shortcuts + Scan Enhancements (2025-06-26)
+
+### Assessment
+The project was in a stable, feature-rich state after Phase 8 (rebrand + multi-provider
+LLM connection). QA via agent-browser + VLM rated the UI 7/10 for professional polish
+with specific issues: inconsistent feature chip gradients, cramped stat cards, no
+onboarding for first-time visitors, and no visible keyboard shortcut help.
+
+### Completed Modifications
+
+#### 1. Styling Polish (page.tsx)
+- **FeatureChip gradient diversity**: Changed from all `gradient-methodology` to
+  `gradient-sector` / `gradient-methodology` / `gradient-problem` for visual variety
+- **Tab bar**: Added `bg-muted/50 p-1 rounded-lg` background to TabsList for visual
+  grouping; active tab already had `shadow-sm` from shadcn
+- **Quick stat cards**: Added `bg-muted/30 rounded-lg ring-1 ring-border/30` for depth;
+  `hover:bg-muted/50 transition-colors` for interactivity
+- **FeatureChip enhancement**: Added `hover:shadow-md transition-shadow`, `ring-1
+  ring-border/30` border; enlarged icon containers from `h-7 w-7` → `h-8 w-8`
+- **Header**: Added `hover:scale-105 transition-transform cursor-pointer` on logo
+  wrapper; `shadow-sm` on header bar
+- **Footer**: Added tiny `h-4 w-4 rounded gradient-sector` hexagon icon before
+  "RepoMosaic Pro" text
+
+#### 2. Onboarding State (page.tsx)
+Added a "How it works" section below the feature chips, visible only when
+`!githubUser && !ownerInfo` (first-time visitors). Uses a dashed-border card
+with 3 visual steps:
+1. **Connect GitHub** (KeyRound icon, sector color) — "Paste a personal access token
+   and pick an org or user"
+2. **Scan commits** (Cable icon, methodology color) — "Select repos and run the skill
+   attribution scan"
+3. **Explore skills** (Network icon, tech color) — "Browse the skill graph, compare
+   people, export reports"
+
+Each step has a colored circular icon, bold title, and muted description.
+
+#### 3. Keyboard Shortcuts Help Overlay (page.tsx)
+- `?` key toggles a Dialog overlay showing all available shortcuts
+- `Escape` closes the overlay (takes priority over other Escape handlers)
+- Dialog displays 4 shortcuts with kbd-styled key badges:
+  - `1-9` — Switch tabs
+  - `?` — Show this help
+  - `Esc` — Close panels / dialog
+  - `/` — Focus search
+- Small `?` button added to footer next to the existing keyboard hint for mouse users
+- Imports: Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+
+#### 4. Number Keys 1-9 Tab Switching (page.tsx)
+- Unified the previously split keyboard handler logic into a single handler
+- Added `SELECT` to the input guard alongside `INPUT`, `TEXTAREA`, `isContentEditable`
+- All 9 tabs mapped: 1→setup, 2→repos, 3→scan, 4→graph, 5→people, 6→analytics,
+  7→activity, 8→compare, 9→insights
+
+#### 5. Scan Progress Panel Enhancements (scan-progress-panel.tsx)
+- **Estimated time remaining**: Calculates rate from `doneRepos / elapsedSec`,
+  estimates `(totalRepos - doneRepos) / rate`, displays as "≈ X min remaining"
+  or "≈ X sec remaining" badge with Clock icon
+- **Progress phase indicator**: 4-step horizontal step bar:
+  1. Fetching commits → 2. Analyzing with LLM → 3. Aggregating results → 4. Complete
+  Uses numbered circles, connecting lines, and color coding (completed=emerald,
+  current=primary, pending=muted)
+- **Cancel scan button**: Red-outlined button visible only during running scan;
+  calls `onCancel` prop if provided, otherwise shows toast "Scan cancellation not
+  yet implemented"
+
+### QA Verification
+- ✅ Lint clean (0 errors)
+- ✅ Dev server 200
+- ✅ Onboarding section visible on first visit (DOM confirmed)
+- ✅ Keyboard shortcuts dialog opens with 4 shortcuts (DOM confirmed:
+  title="Keyboard Shortcuts", keys=[1-9, ?, Esc, /])
+- ✅ Tab switching via 1-9 keys works
+- ✅ Footer gradient icon + ? button present (DOM confirmed)
+- ✅ Committed `dacefd6` and pushed to GitHub
+
+### Unresolved Issues / Risks
+1. **Scan cancellation** — The cancel button shows a toast saying "not yet implemented".
+   Need to add actual scan cancellation via an abort signal.
+2. **VLM rate limiting** — During active scans, VLM calls get 429 errors. The retry
+  logic handles this, but QA screenshots during scans are delayed.
+3. **Mobile card views** — The People table is still best on desktop; could add
+  card-based layout for small screens.
+
+### Priority Recommendations for Next Phase
+1. **Scan cancellation** — Wire the cancel button to abort the running scan via
+  AbortController or a shared flag.
+2. **Mobile responsive People tab** — Add card-based layout for small screens.
+3. **PDF report export** — Generate a professional PDF with charts.
+4. **Search/typeahead** — Add search to People table and Skill Comparison dropdowns.
+5. **Real-time WebSocket scan progress** — Replace polling with WebSocket updates.
+
