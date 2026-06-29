@@ -44,6 +44,8 @@ import { CommitHeatmap } from "@/components/repomosaic/commit-heatmap";
 import { SkillComparison } from "@/components/repomosaic/skill-comparison";
 import { PdfExportButton } from "@/components/repomosaic/pdf-export-button";
 import { SkillGroupMapPanel } from "@/components/repomosaic/skill-group-map-panel";
+import { PersonMergePanel } from "@/components/repomosaic/person-merge-panel";
+import { applyMergeRules, type PersonMergeRule } from "@/lib/analysis/person-merge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
@@ -84,8 +86,18 @@ export default function Home() {
   const [selectedPerson, setSelectedPerson] = useState<PersonSkillRecord | null>(null);
   // Keyboard shortcuts overlay
   const [showShortcuts, setShowShortcuts] = useState(false);
+  // Person merge rules (persisted)
+  const [mergeRules, setMergeRules] = useState<PersonMergeRule[]>([]);
 
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ---- Merged skill map ----
+  // Apply merge rules to the raw skill map, producing a combined view
+  const mergedSkillMap = useMemo(() => {
+    if (!skillMap) return null;
+    if (mergeRules.length === 0) return skillMap;
+    return applyMergeRules(skillMap, mergeRules);
+  }, [skillMap, mergeRules]);
 
   // ---- GitHub API helpers ----
   const verifyGithub = useCallback(async (token: string) => {
@@ -260,11 +272,40 @@ export default function Home() {
     };
   }, [scanId]);
 
+  // ---- Auto-load cached scan on mount (if no owner resolved yet) ----
+  useEffect(() => {
+    if (ownerInfo || skillMap) return; // skip if already loaded
+    const tryAutoLoad = async () => {
+      try {
+        const org = "Gaia-Recipe";
+        const url = new URL("/api/settings", window.location.origin);
+        url.searchParams.set("org", org);
+        url.searchParams.set("ownerKind", "org");
+        url.searchParams.set("branchMode", branchMode);
+        url.searchParams.set("model", setup.llmConfig.model ?? "glm-4-plus");
+        url.searchParams.set("provider", setup.llmConfig.provider);
+        const r = await fetch(url.toString());
+        if (!r.ok) return;
+        const data = await r.json();
+        if (data.cached) {
+          setSkillMap(data.cached.skillMap as AdvancedSkillMap);
+          toast({
+            title: "Loaded cached scan",
+            description: `${data.cached.org} · ${data.cached.totalRepos} repos · ${data.cached.totalChunks} chunks`,
+          });
+        }
+      } catch {
+        // ignore
+      }
+    };
+    tryAutoLoad();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // run once on mount
+
   // ---- Cache check on owner load ----
   useEffect(() => {
     if (!ownerInfo) {
-      setSkillMap(null);
-      return;
+      return; // don't clear skillMap — auto-load may have set it
     }
     const checkCache = async () => {
       try {
@@ -291,6 +332,76 @@ export default function Home() {
     checkCache();
   }, [ownerInfo, branchMode, setup.llmConfig.model, setup.llmConfig.provider, toast]);
 
+  // ---- Load merge rules when skill map is available ----
+  useEffect(() => {
+    if (!skillMap) return;
+    const loadMerges = async () => {
+      try {
+        const r = await fetch(`/api/person-merge?org=${encodeURIComponent(skillMap.org)}`);
+        if (!r.ok) return;
+        const data = await r.json();
+        setMergeRules(data.rules || []);
+      } catch {
+        // ignore
+      }
+    };
+    loadMerges();
+  }, [skillMap]);
+
+  // ---- Merge API handlers ----
+  const handleMerge = useCallback(async (primaryLogin: string, mergedLogins: string[]) => {
+    if (!skillMap) return;
+    try {
+      const r = await fetch("/api/person-merge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org: skillMap.org, primaryLogin, mergedLogins }),
+      });
+      if (!r.ok) {
+        const e = await r.json();
+        throw new Error(e.error || "Merge failed");
+      }
+      const data = await r.json();
+      setMergeRules((prev) => [...prev, data.rule]);
+      toast({ title: "Accounts merged", description: `${mergedLogins.length} accounts → @${primaryLogin}` });
+    } catch (err) {
+      toast({ title: "Merge failed", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [skillMap, toast]);
+
+  const handleUnmerge = useCallback(async (ruleId: string) => {
+    try {
+      const r = await fetch("/api/person-merge", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ruleId }),
+      });
+      if (!r.ok) throw new Error("Unmerge failed");
+      setMergeRules((prev) => prev.filter((r) => r.id !== ruleId));
+      toast({ title: "Accounts unmerged", description: "People are now separate again" });
+    } catch (err) {
+      toast({ title: "Unmerge failed", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [toast]);
+
+  const handleChangePrimary = useCallback(async (ruleId: string, newPrimary: string) => {
+    try {
+      const rule = mergeRules.find((r) => r.id === ruleId);
+      if (!rule) return;
+      const r = await fetch("/api/person-merge", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: ruleId, primaryLogin: newPrimary, mergedLogins: rule.mergedLogins }),
+      });
+      if (!r.ok) throw new Error("Update failed");
+      const data = await r.json();
+      setMergeRules((prev) => prev.map((r) => r.id === ruleId ? data.rule : r));
+      toast({ title: "Primary account changed", description: `Now using @${newPrimary}` });
+    } catch (err) {
+      toast({ title: "Update failed", description: (err as Error).message, variant: "destructive" });
+    }
+  }, [mergeRules, toast]);
+
   // ---- Export ----
   const exportData = useCallback(
     async (format: "json" | "markdown") => {
@@ -315,9 +426,9 @@ export default function Home() {
   // pipeline from actual commit dates). Falls back to empty for old cached
   // scans that don't have date info.
   const heatmapData = useMemo(() => {
-    if (!skillMap || !skillMap.activity) return [];
-    return skillMap.activity;
-  }, [skillMap]);
+    if (!mergedSkillMap || !mergedSkillMap.activity) return [];
+    return mergedSkillMap.activity;
+  }, [mergedSkillMap]);
 
   // ---- Keyboard shortcuts ----
   // 1-9 switches tabs (when not typing in an input), Esc closes the person
@@ -518,17 +629,17 @@ export default function Home() {
                 </div>
               )}
               {/* Quick Stats Banner when data is loaded */}
-              {skillMap && (
+              {mergedSkillMap && (
                 <div className="mt-4 rounded-xl border bg-card p-4 shadow-soft animate-fade-in-up">
                   <div className="flex items-center gap-2 mb-3">
                     <Zap className="h-4 w-4 text-sector" />
                     <span className="text-sm font-semibold">Last Scan Summary</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <QuickStat label="People" value={skillMap.totalPeople} icon={<Users className="h-3.5 w-3.5" />} color="text-people" />
-                    <QuickStat label="Commits" value={skillMap.totalCommits} icon={<GitCommit className="h-3.5 w-3.5" />} color="text-sector" />
-                    <QuickStat label="Chunks" value={skillMap.totalChunks} icon={<Boxes className="h-3.5 w-3.5" />} color="text-methodology" />
-                    <QuickStat label="Repos" value={skillMap.totalRepos} icon={<Github className="h-3.5 w-3.5" />} color="text-problem" />
+                    <QuickStat label="People" value={mergedSkillMap.totalPeople} icon={<Users className="h-3.5 w-3.5" />} color="text-people" />
+                    <QuickStat label="Commits" value={mergedSkillMap.totalCommits} icon={<GitCommit className="h-3.5 w-3.5" />} color="text-sector" />
+                    <QuickStat label="Chunks" value={mergedSkillMap.totalChunks} icon={<Boxes className="h-3.5 w-3.5" />} color="text-methodology" />
+                    <QuickStat label="Repos" value={mergedSkillMap.totalRepos} icon={<Github className="h-3.5 w-3.5" />} color="text-problem" />
                   </div>
                   <Button
                     variant="outline"
@@ -582,9 +693,9 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="graph">
-            {skillMap ? (
+            {mergedSkillMap ? (
               <AdvancedSkillGraph
-                skillMap={skillMap}
+                skillMap={mergedSkillMap}
                 focusRequest={focusRequest}
                 compareRequest={compareRequest}
                 onSelectPerson={(person) => setSelectedPerson(person)}
@@ -600,15 +711,25 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="people">
-            {skillMap ? (
-              <PeopleTable
-                skillMap={skillMap}
-                onSwitchToGraph={(login) => {
-                  setFocusRequest(`${login}:${Date.now()}`);
-                  setActiveTab("graph");
-                }}
-                onInspectPerson={(person) => setSelectedPerson(person)}
-              />
+            {mergedSkillMap ? (
+              <div className="space-y-4">
+                <PersonMergePanel
+                  skillMap={mergedSkillMap}
+                  mergeRules={mergeRules}
+                  onMerge={handleMerge}
+                  onUnmerge={handleUnmerge}
+                  onChangePrimary={handleChangePrimary}
+                  onInspectPerson={(person) => setSelectedPerson(person)}
+                />
+                <PeopleTable
+                  skillMap={mergedSkillMap}
+                  onSwitchToGraph={(login) => {
+                    setFocusRequest(`${login}:${Date.now()}`);
+                    setActiveTab("graph");
+                  }}
+                  onInspectPerson={(person) => setSelectedPerson(person)}
+                />
+              </div>
             ) : (
               <EmptyState
                 icon={<Users className="h-6 w-6" />}
@@ -620,13 +741,13 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="analytics">
-            {skillMap ? (
+            {mergedSkillMap ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-end gap-2">
-                  <PdfExportButton skillMap={skillMap} />
+                  <PdfExportButton skillMap={mergedSkillMap} />
                 </div>
                 <AnalyticsPanel
-                  skillMap={skillMap}
+                  skillMap={mergedSkillMap}
                   onComparePair={(a, b) => {
                     setCompareRequest(`${a}|${b}:${Date.now()}`);
                     setActiveTab("graph");
@@ -644,8 +765,8 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="compare">
-            {skillMap && skillMap.people.length >= 2 ? (
-              <SkillComparison skillMap={skillMap} />
+            {mergedSkillMap && mergedSkillMap.people.length >= 2 ? (
+              <SkillComparison skillMap={mergedSkillMap} />
             ) : (
               <EmptyState
                 icon={<ArrowLeftRight className="h-6 w-6" />}
@@ -657,25 +778,25 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="activity">
-            {skillMap ? (
+            {mergedSkillMap ? (
               <div className="space-y-6">
                 <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up">
                   <div className="flex items-center gap-2 mb-4">
                     <Activity className="h-4 w-4 text-problem" />
                     <h3 className="text-sm font-semibold">Commit Activity</h3>
-                    {skillMap.firstCommitDate && skillMap.lastCommitDate && (
+                    {mergedSkillMap.firstCommitDate && mergedSkillMap.lastCommitDate && (
                       <Badge variant="outline" className="text-[10px] font-mono ml-auto">
-                        {skillMap.firstCommitDate} → {skillMap.lastCommitDate}
+                        {mergedSkillMap.firstCommitDate} → {mergedSkillMap.lastCommitDate}
                       </Badge>
                     )}
                     <Badge variant="outline" className="text-[10px] font-mono">
-                      {skillMap.totalCommits} total commits
+                      {mergedSkillMap.totalCommits} total commits
                     </Badge>
                   </div>
                   {heatmapData.length > 0 ? (
                     <CommitHeatmap
                       data={heatmapData}
-                      totalCommits={skillMap.totalCommits}
+                      totalCommits={mergedSkillMap.totalCommits}
                     />
                   ) : (
                     <div className="text-xs text-muted-foreground italic py-8 text-center">
@@ -691,10 +812,10 @@ export default function Home() {
                     <h3 className="text-sm font-semibold">Contributor Activity</h3>
                   </div>
                   <div className="space-y-3">
-                    {skillMap.people
+                    {mergedSkillMap.people
                       .sort((a, b) => b.totalCommits - a.totalCommits)
                       .map((p, i) => {
-                        const maxCommits = skillMap.people[0]?.totalCommits ?? 1;
+                        const maxCommits = mergedSkillMap.people[0]?.totalCommits ?? 1;
                         const pct = (p.totalCommits / maxCommits) * 100;
                         return (
                           <div key={p.login} className="flex items-center gap-3 group cursor-pointer hover:bg-muted/40 -mx-2 px-2 py-1.5 rounded-lg transition-colors" onClick={() => setSelectedPerson(p)}>
@@ -729,11 +850,11 @@ export default function Home() {
                   </div>
                   <div className="space-y-3">
                     {[
-                      { label: "Sectors", items: skillMap.orgSectors, color: "bg-sector", textClass: "text-sector" },
-                      { label: "Problem Types", items: skillMap.orgProblemTypes, color: "bg-problem", textClass: "text-problem" },
-                      { label: "Tech", items: skillMap.orgTech, color: "bg-tech", textClass: "text-tech" },
-                      { label: "Methodologies", items: skillMap.orgMethodologies, color: "bg-methodology", textClass: "text-methodology" },
-                      { label: "Roles", items: skillMap.orgRoles, color: "bg-role", textClass: "text-role" },
+                      { label: "Sectors", items: mergedSkillMap.orgSectors, color: "bg-sector", textClass: "text-sector" },
+                      { label: "Problem Types", items: mergedSkillMap.orgProblemTypes, color: "bg-problem", textClass: "text-problem" },
+                      { label: "Tech", items: mergedSkillMap.orgTech, color: "bg-tech", textClass: "text-tech" },
+                      { label: "Methodologies", items: mergedSkillMap.orgMethodologies, color: "bg-methodology", textClass: "text-methodology" },
+                      { label: "Roles", items: mergedSkillMap.orgRoles, color: "bg-role", textClass: "text-role" },
                     ].map((dim) => {
                       const totalScore = dim.items.reduce((sum, s) => sum + s.score, 0);
                       return (
@@ -773,8 +894,8 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="insights">
-            {skillMap ? (
-              <InsightsPanel skillMap={skillMap} onSelectPerson={(p) => setSelectedPerson(p)} />
+            {mergedSkillMap ? (
+              <InsightsPanel skillMap={mergedSkillMap} onSelectPerson={(p) => setSelectedPerson(p)} />
             ) : (
               <EmptyState
                 icon={<Lightbulb className="h-6 w-6" />}
@@ -786,9 +907,9 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="skillmap">
-            {skillMap ? (
+            {mergedSkillMap ? (
               <SkillGroupMapPanel
-                skillMap={skillMap}
+                skillMap={mergedSkillMap}
                 onSelectPerson={(p) => setSelectedPerson(p)}
               />
             ) : (

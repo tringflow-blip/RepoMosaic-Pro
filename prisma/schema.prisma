@@ -60,3 +60,15 @@ model SkillGroupTemplate {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// Person merge rules — when the same person uses multiple GitHub accounts
+model PersonMerge {
+  id           String   @id @default(cuid())
+  org          String   // which org this merge applies to
+  primaryLogin String   // the main login (name/avatar/url taken from here)
+  mergedLogins String   // JSON array of all logins (including primary)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([org, primaryLogin])
+}
