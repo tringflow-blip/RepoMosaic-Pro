@@ -55,112 +55,113 @@
 :root {
   --radius: 0.75rem;
 
-  /* Warm cream canvas (Emil Kowalski / Impeccable design language) */
-  --background: oklch(0.985 0.005 80);
-  --foreground: oklch(0.22 0.012 60);
+  /* Professional warm-gray canvas — consulting report aesthetic */
+  --background: oklch(0.98 0.003 70);
+  --foreground: oklch(0.18 0.02 260);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.22 0.012 60);
+  --card-foreground: oklch(0.18 0.02 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.22 0.012 60);
-  /* Beige-tan accent */
-  --primary: oklch(0.42 0.04 60);
-  --primary-foreground: oklch(0.985 0.005 80);
-  --secondary: oklch(0.96 0.008 75);
-  --secondary-foreground: oklch(0.30 0.02 60);
-  --muted: oklch(0.965 0.006 75);
-  --muted-foreground: oklch(0.50 0.014 65);
-  --accent: oklch(0.94 0.015 75);
-  --accent-foreground: oklch(0.30 0.02 60);
+  --popover-foreground: oklch(0.18 0.02 260);
+  /* Deep navy/slate primary — authoritative, corporate */
+  --primary: oklch(0.28 0.04 260);
+  --primary-foreground: oklch(0.98 0.003 70);
+  --secondary: oklch(0.95 0.005 260);
+  --secondary-foreground: oklch(0.24 0.03 260);
+  --muted: oklch(0.96 0.004 260);
+  --muted-foreground: oklch(0.48 0.02 260);
+  --accent: oklch(0.93 0.008 260);
+  --accent-foreground: oklch(0.24 0.03 260);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.91 0.008 75);
-  --input: oklch(0.94 0.008 75);
-  --ring: oklch(0.75 0.10 75);
+  --border: oklch(0.92 0.004 260);
+  --input: oklch(0.94 0.005 260);
+  --ring: oklch(0.45 0.06 260);
 
-  /* Dimension semantic colors — EXACT logo palette (hexagon mosaic logo):
-     Orange  #FFA500  → sector    (top hexagon)
-     Turquoise #40E0D0 → tech      (center hexagon — core dimension)
-     Red     #FF0000  → problem   (right hexagon)
-     Purple  #8A2BE2  → methodology (bottom-right + left hexagons)
-     LightBlue #87CEFA → role      (top-right hexagon)
-     Blue    #0000CD  → people    (bottom-left hexagon)
-     All icons in the app use ONLY these 6 colors. */
-  --sector: #FFA500;
-  --problem: #FF0000;
-  --tech: #40E0D0;
-  --methodology: #8A2BE2;
-  --role: #87CEFA;
-  --people: #0000CD;
+  /* Dimension semantic colors — Muted corporate palette:
+     Burnt sienna/rust  #C97B3D  → sector    (warm, understated)
+     Burgundy/crimson   #B44A4A  → problem   (serious, restrained)
+     Deep teal          #2A9D8F  → tech      (sophisticated, calm)
+     Muted indigo       #6B5B95  → methodology (refined, thoughtful)
+     Steel blue         #5B8DB8  → role      (professional, steady)
+     Navy               #2D4A7A  → people    (authoritative, deep)
+     Still recognizable as the original palette, but far more professional. */
+  --sector: #C97B3D;
+  --problem: #B44A4A;
+  --tech: #2A9D8F;
+  --methodology: #6B5B95;
+  --role: #5B8DB8;
+  --people: #2D4A7A;
 
-  --chart-1: #FFA500;
-  --chart-2: #FF0000;
-  --chart-3: #8A2BE2;
-  --chart-4: #87CEFA;
-  --chart-5: #0000CD;
+  --chart-1: #C97B3D;
+  --chart-2: #B44A4A;
+  --chart-3: #6B5B95;
+  --chart-4: #5B8DB8;
+  --chart-5: #2D4A7A;
 
-  --sidebar: oklch(0.97 0.006 75);
-  --sidebar-foreground: oklch(0.22 0.012 60);
-  --sidebar-primary: oklch(0.42 0.04 60);
-  --sidebar-primary-foreground: oklch(0.985 0.005 80);
-  --sidebar-accent: oklch(0.94 0.015 75);
-  --sidebar-accent-foreground: oklch(0.30 0.02 60);
-  --sidebar-border: oklch(0.91 0.008 75);
-  --sidebar-ring: oklch(0.75 0.10 75);
+  --sidebar: oklch(0.97 0.004 260);
+  --sidebar-foreground: oklch(0.18 0.02 260);
+  --sidebar-primary: oklch(0.28 0.04 260);
+  --sidebar-primary-foreground: oklch(0.98 0.003 70);
+  --sidebar-accent: oklch(0.93 0.008 260);
+  --sidebar-accent-foreground: oklch(0.24 0.03 260);
+  --sidebar-border: oklch(0.92 0.004 260);
+  --sidebar-ring: oklch(0.45 0.06 260);
 
-  --shadow-soft: 1px 4px 12px -2px oklch(0.30 0.02 60 / 0.08);
-  --shadow-soft-lg: 2px 12px 28px -4px oklch(0.30 0.02 60 / 0.12);
+  /* Subtle shadows — consulting report: clean, minimal depth */
+  --shadow-soft: 0 1px 3px 0 oklch(0.20 0.02 260 / 0.05), 0 1px 2px -1px oklch(0.20 0.02 260 / 0.05);
+  --shadow-soft-lg: 0 2px 6px -1px oklch(0.20 0.02 260 / 0.06), 0 2px 4px -2px oklch(0.20 0.02 260 / 0.05);
 
-  --scrollbar-thumb: oklch(0.50 0 0 / 0.25);
-  --scrollbar-thumb-hover: oklch(0.50 0 0 / 0.45);
+  --scrollbar-thumb: oklch(0.50 0 0 / 0.20);
+  --scrollbar-thumb-hover: oklch(0.50 0 0 / 0.35);
 }
 
 .dark {
-  --background: oklch(0.16 0.008 60);
-  --foreground: oklch(0.96 0.005 80);
-  --card: oklch(0.21 0.008 60);
-  --card-foreground: oklch(0.96 0.005 80);
-  --popover: oklch(0.21 0.008 60);
-  --popover-foreground: oklch(0.96 0.005 80);
-  --primary: oklch(0.80 0.07 75);
-  --primary-foreground: oklch(0.18 0.008 60);
-  --secondary: oklch(0.27 0.010 60);
-  --secondary-foreground: oklch(0.96 0.005 80);
-  --muted: oklch(0.24 0.008 60);
-  --muted-foreground: oklch(0.70 0.010 70);
-  --accent: oklch(0.30 0.015 65);
-  --accent-foreground: oklch(0.96 0.005 80);
+  --background: oklch(0.14 0.006 260);
+  --foreground: oklch(0.95 0.004 70);
+  --card: oklch(0.18 0.008 260);
+  --card-foreground: oklch(0.95 0.004 70);
+  --popover: oklch(0.18 0.008 260);
+  --popover-foreground: oklch(0.95 0.004 70);
+  --primary: oklch(0.72 0.05 260);
+  --primary-foreground: oklch(0.14 0.006 260);
+  --secondary: oklch(0.24 0.008 260);
+  --secondary-foreground: oklch(0.95 0.004 70);
+  --muted: oklch(0.22 0.006 260);
+  --muted-foreground: oklch(0.65 0.015 260);
+  --accent: oklch(0.27 0.01 260);
+  --accent-foreground: oklch(0.95 0.004 70);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.70 0.10 75);
+  --border: oklch(1 0 0 / 7%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.55 0.06 260);
 
-  /* Dark mode — same logo hues, slightly brighter for contrast on dark bg */
-  --sector: #FFB733;
-  --problem: #FF3333;
-  --tech: #5CECE0;
-  --methodology: #A040EC;
-  --role: #A0D8FF;
-  --people: #3333E8;
+  /* Dark mode — muted dimension colors, slightly brighter for contrast */
+  --sector: #D99558;
+  --problem: #CC6B6B;
+  --tech: #3DB8A8;
+  --methodology: #8A7BB5;
+  --role: #7BA8CC;
+  --people: #4A6FA0;
 
-  --chart-1: #FFB733;
-  --chart-2: #FF3333;
-  --chart-3: #A040EC;
-  --chart-4: #A0D8FF;
-  --chart-5: #3333E8;
+  --chart-1: #D99558;
+  --chart-2: #CC6B6B;
+  --chart-3: #8A7BB5;
+  --chart-4: #7BA8CC;
+  --chart-5: #4A6FA0;
 
-  --sidebar: oklch(0.21 0.008 60);
-  --sidebar-foreground: oklch(0.96 0.005 80);
-  --sidebar-primary: oklch(0.80 0.07 75);
-  --sidebar-primary-foreground: oklch(0.18 0.008 60);
-  --sidebar-accent: oklch(0.30 0.015 65);
-  --sidebar-accent-foreground: oklch(0.96 0.005 80);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.70 0.10 75);
+  --sidebar: oklch(0.18 0.008 260);
+  --sidebar-foreground: oklch(0.95 0.004 70);
+  --sidebar-primary: oklch(0.72 0.05 260);
+  --sidebar-primary-foreground: oklch(0.14 0.006 260);
+  --sidebar-accent: oklch(0.27 0.01 260);
+  --sidebar-accent-foreground: oklch(0.95 0.004 70);
+  --sidebar-border: oklch(1 0 0 / 7%);
+  --sidebar-ring: oklch(0.55 0.06 260);
 
-  --shadow-soft: 1px 4px 12px -2px oklch(0 0 0 / 0.4);
-  --shadow-soft-lg: 2px 12px 28px -4px oklch(0 0 0 / 0.55);
+  --shadow-soft: 0 1px 3px 0 oklch(0 0 0 / 0.30), 0 1px 2px -1px oklch(0 0 0 / 0.25);
+  --shadow-soft-lg: 0 2px 6px -1px oklch(0 0 0 / 0.40), 0 2px 4px -2px oklch(0 0 0 / 0.30);
 
-  --scrollbar-thumb: oklch(0.60 0 0 / 0.35);
-  --scrollbar-thumb-hover: oklch(0.70 0 0 / 0.55);
+  --scrollbar-thumb: oklch(0.60 0 0 / 0.30);
+  --scrollbar-thumb-hover: oklch(0.70 0 0 / 0.45);
 }
 
 @layer base {
@@ -199,61 +200,99 @@
   .border-role { border-color: var(--role); }
   .border-people { border-color: var(--people); }
 
-  /* ---- Gradient accent utilities (logo hex colors) ---- */
+  /* ---- Gradient accent utilities (muted corporate palette) ---- */
   .gradient-sector {
-    background: linear-gradient(135deg, #FFA500, #FF8C00);
+    background: linear-gradient(135deg, #C97B3D, #A86530);
   }
   .gradient-tech {
-    background: linear-gradient(135deg, #40E0D0, #20B2AA);
+    background: linear-gradient(135deg, #2A9D8F, #228075);
   }
   .gradient-problem {
-    background: linear-gradient(135deg, #FF0000, #DC143C);
+    background: linear-gradient(135deg, #B44A4A, #963C3C);
   }
   .gradient-methodology {
-    background: linear-gradient(135deg, #8A2BE2, #9370DB);
+    background: linear-gradient(135deg, #6B5B95, #584A7E);
   }
   .gradient-role {
-    background: linear-gradient(135deg, #87CEFA, #6495ED);
+    background: linear-gradient(135deg, #5B8DB8, #4A7598);
   }
   .gradient-people {
-    background: linear-gradient(135deg, #0000CD, #4169E1);
+    background: linear-gradient(135deg, #2D4A7A, #223A62);
   }
   .gradient-hero {
-    background: linear-gradient(180deg, oklch(0.95 0.015 80), oklch(0.985 0.005 80));
+    background: linear-gradient(180deg, oklch(0.96 0.006 260), oklch(0.98 0.003 70));
+  }
+
+  /* ---- Professional typography utilities ---- */
+  .text-display {
+    font-size: 1.125rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.3;
+    color: var(--foreground);
+  }
+  .text-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 500;
+    color: var(--muted-foreground);
+  }
+  .text-stat {
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+  .text-mono-sm {
+    font-family: var(--font-geist-mono), ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--muted-foreground);
+  }
+
+  /* ---- Divider rule — consulting report section separator ---- */
+  .divider-rule {
+    border: none;
+    border-top: 1px solid oklch(0.88 0.004 260 / 0.6);
+    margin: 1rem 0;
+  }
+  .dark .divider-rule {
+    border-top-color: oklch(1 0 0 / 8%);
   }
 
   /* ---- Custom slim scrollbar for overflow containers (.max-h-*, etc.) ---- */
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: transparent;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: color-mix(in oklch, var(--muted-foreground) 30%, transparent);
+    background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
     border-radius: 3px;
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklch, var(--muted-foreground) 50%, transparent);
+    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
   }
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 30%, transparent) transparent;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 25%, transparent) transparent;
   }
 
-  /* ---- Animation utilities ---- */
+  /* ---- Animation utilities (subtle, professional) ---- */
   .animate-fade-in-up {
-    animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: fade-in-up 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .animate-slide-in-left {
-    animation: slide-in-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: slide-in-left 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .animate-slide-in-right {
-    animation: slide-in-right 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: slide-in-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .animate-scale-in {
-    animation: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation: scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .animate-pulse-soft {
     animation: pulse-soft 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
@@ -265,7 +304,7 @@
     background: linear-gradient(
       90deg,
       transparent,
-      oklch(1 0 0 / 0.06),
+      oklch(1 0 0 / 0.04),
       transparent
     );
     background-size: 200% 100%;
@@ -279,80 +318,83 @@
   .stagger-4 { animation-delay: 0.20s; }
   .stagger-5 { animation-delay: 0.25s; }
 
-  /* ---- Glass morphism utilities ---- */
+  /* ---- Glass morphism utilities (restrained) ---- */
   .glass {
-    background: oklch(1 0 0 / 0.55);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid oklch(1 0 0 / 0.18);
+    background: oklch(1 0 0 / 0.60);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid oklch(0.88 0.004 260 / 0.3);
   }
   .dark .glass {
-    background: oklch(0.2 0 0 / 0.55);
-    border: 1px solid oklch(1 0 0 / 0.08);
+    background: oklch(0.18 0 0 / 0.60);
+    border: 1px solid oklch(1 0 0 / 6%);
   }
   .glass-strong {
-    background: oklch(1 0 0 / 0.72);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid oklch(1 0 0 / 0.25);
+    background: oklch(1 0 0 / 0.75);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid oklch(0.88 0.004 260 / 0.4);
   }
   .dark .glass-strong {
-    background: oklch(0.2 0 0 / 0.72);
-    border: 1px solid oklch(1 0 0 / 0.12);
+    background: oklch(0.18 0 0 / 0.75);
+    border: 1px solid oklch(1 0 0 / 10%);
   }
 
-  /* ---- Heatmap cell colors (oklch green scale) ---- */
+  /* ---- Heatmap cell colors (muted green scale — consulting aesthetic) ---- */
   .heatmap-0 {
-    background-color: oklch(0.96 0.01 145);
+    background-color: oklch(0.96 0.006 160);
   }
   .heatmap-1 {
-    background-color: oklch(0.80 0.10 145);
+    background-color: oklch(0.82 0.06 160);
   }
   .heatmap-2 {
-    background-color: oklch(0.65 0.15 145);
+    background-color: oklch(0.68 0.09 160);
   }
   .heatmap-3 {
-    background-color: oklch(0.52 0.17 145);
+    background-color: oklch(0.55 0.11 160);
   }
   .heatmap-4 {
-    background-color: oklch(0.42 0.18 145);
+    background-color: oklch(0.44 0.12 160);
   }
   .dark .heatmap-0 {
-    background-color: oklch(0.24 0.01 145);
+    background-color: oklch(0.22 0.006 160);
   }
   .dark .heatmap-1 {
-    background-color: oklch(0.38 0.10 145);
+    background-color: oklch(0.36 0.07 160);
   }
   .dark .heatmap-2 {
-    background-color: oklch(0.52 0.14 145);
+    background-color: oklch(0.48 0.10 160);
   }
   .dark .heatmap-3 {
-    background-color: oklch(0.62 0.16 145);
+    background-color: oklch(0.58 0.11 160);
   }
   .dark .heatmap-4 {
-    background-color: oklch(0.72 0.17 145);
+    background-color: oklch(0.66 0.12 160);
   }
 
-  /* ---- Enhanced card styling ---- */
+  /* ---- Refined card styling (no playful hover lift) ---- */
   .card-elevated {
-    box-shadow: var(--shadow-soft-lg);
-    transition: box-shadow 0.25s ease, transform 0.25s ease;
+    box-shadow: var(--shadow-soft);
+    border: 1px solid oklch(0.91 0.004 260 / 0.6);
+    transition: box-shadow 0.2s ease;
   }
   .card-elevated:hover {
-    box-shadow: 2px 16px 36px -6px oklch(0.30 0.02 60 / 0.18);
-    transform: translateY(-2px);
+    box-shadow: var(--shadow-soft-lg);
+  }
+  .dark .card-elevated {
+    border-color: oklch(1 0 0 / 6%);
   }
   .dark .card-elevated:hover {
-    box-shadow: 2px 16px 36px -6px oklch(0 0 0 / 0.6);
+    box-shadow: var(--shadow-soft-lg);
   }
   .card-glow {
-    transition: box-shadow 0.3s ease;
+    transition: box-shadow 0.2s ease;
   }
   .card-glow:hover {
-    box-shadow: 0 0 20px 2px oklch(0.75 0.10 75 / 0.15), var(--shadow-soft);
+    box-shadow: 0 0 12px 1px oklch(0.45 0.04 260 / 0.08), var(--shadow-soft);
   }
   .dark .card-glow:hover {
-    box-shadow: 0 0 20px 2px oklch(0.70 0.10 75 / 0.12), var(--shadow-soft);
+    box-shadow: 0 0 12px 1px oklch(0.55 0.04 260 / 0.06), var(--shadow-soft);
   }
 
   /* ---- Focus / active states ---- */
@@ -367,41 +409,41 @@
     transition: transform 0.1s ease;
   }
   .active-scale:active {
-    transform: scale(0.97);
+    transform: scale(0.98);
   }
 
   /* ---- Radar chart grid lines ---- */
   .radar-grid {
-    stroke: oklch(0.78 0.01 75 / 0.3);
+    stroke: oklch(0.82 0.004 260 / 0.3);
   }
   .dark .radar-grid {
-    stroke: oklch(0.40 0.01 60 / 0.4);
+    stroke: oklch(0.35 0.006 260 / 0.4);
   }
   .radar-axis {
-    stroke: oklch(0.60 0.02 60 / 0.5);
+    stroke: oklch(0.55 0.02 260 / 0.4);
   }
   .dark .radar-axis {
-    stroke: oklch(0.55 0.02 60 / 0.5);
+    stroke: oklch(0.50 0.02 260 / 0.4);
   }
 }
 
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(6px); }
+  from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes slide-in-left {
-  from { opacity: 0; transform: translateX(-16px); }
+  from { opacity: 0; transform: translateX(-10px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes slide-in-right {
-  from { opacity: 0; transform: translateX(16px); }
+  from { opacity: 0; transform: translateX(10px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
 @keyframes scale-in {
-  from { opacity: 0; transform: scale(0.95); }
+  from { opacity: 0; transform: scale(0.97); }
   to   { opacity: 1; transform: scale(1); }
 }
 
@@ -411,8 +453,8 @@
 }
 
 @keyframes glow {
-  from { box-shadow: 0 0 4px 1px oklch(0.75 0.10 75 / 0.1); }
-  to   { box-shadow: 0 0 12px 3px oklch(0.75 0.10 75 / 0.25); }
+  from { box-shadow: 0 0 3px 1px oklch(0.45 0.04 260 / 0.06); }
+  to   { box-shadow: 0 0 8px 2px oklch(0.45 0.04 260 / 0.12); }
 }
 
 @keyframes shimmer {
@@ -426,7 +468,7 @@
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thumb) transparent;
   }
-  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar { width: 6px; height: 6px; }
   *::-webkit-scrollbar-track { background: transparent; }
   *::-webkit-scrollbar-thumb {
     background: var(--scrollbar-thumb);

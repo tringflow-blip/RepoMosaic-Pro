@@ -323,10 +323,10 @@ export function aggregateSkillMap(input: AggregationInput): AdvancedSkillMap {
 
   for (const [key, exts] of byPerson.entries()) {
     const meta = input.personMeta.get(key) ?? {
-      login: key,
-      name: exts[0]?.author ?? key,
-      avatarUrl: "",
-      url: "",
+      login: exts[0]?.authorLogin ?? key,
+      name: exts[0]?.authorLogin ?? exts[0]?.author ?? key,
+      avatarUrl: exts[0]?.authorLogin ? `https://github.com/${exts[0].authorLogin}.png` : "",
+      url: exts[0]?.authorLogin ? `https://github.com/${exts[0].authorLogin}` : "",
     };
 
     const sectors = newDimAgg();

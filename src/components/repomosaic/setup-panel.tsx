@@ -28,11 +28,11 @@ import {
   EyeOff,
   Network,
   Boxes,
-  Zap,
   Cable,
   ExternalLink,
   Cpu,
   ShieldCheck,
+  ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
@@ -174,41 +174,38 @@ export function SetupPanel({
   const ready = !!githubUser && !!ownerInfo;
 
   return (
-    <Card className="shadow-soft-lg animate-fade-in-up">
-      <CardHeader>
+    <Card className="border shadow-sm">
+      <CardHeader className="pb-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <CardTitle className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-md gradient-sector flex items-center justify-center">
-                <Settings2 className="h-3.5 w-3.5 text-white" />
-              </div>
-              Setup
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Settings2 className="h-4 w-4 text-muted-foreground" />
+              Configuration
             </CardTitle>
-            <CardDescription className="mt-1.5">
-              Connect GitHub and pick an LLM provider. The sandbox default needs no
-              key — add one only when you switch to a hosted provider.
+            <CardDescription className="mt-1 text-[11px]">
+              Authenticate with GitHub and select an LLM provider for skill attribution analysis.
             </CardDescription>
           </div>
-          <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="shrink-0 active-scale">
+          <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="shrink-0">
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
         </div>
       </CardHeader>
       <CardContent className="space-y-5">
         <Tabs defaultValue="github">
-          <TabsList className="w-full bg-muted/50 p-1">
-            <TabsTrigger value="github" className="flex-1 text-xs transition-all">
-              <Github className="h-3 w-3 mr-1.5 text-people" /> GitHub
+          <TabsList className="w-full bg-transparent border-b p-0 rounded-none h-auto">
+            <TabsTrigger value="github" className="flex-1 text-xs rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+              GitHub
             </TabsTrigger>
-            <TabsTrigger value="llm" className="flex-1 text-xs transition-all">
-              <Cable className="h-3 w-3 mr-1.5 text-methodology" /> LLM Connection
+            <TabsTrigger value="llm" className="flex-1 text-xs rounded-none border-b-2 border-transparent data-[state=active]:border-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none py-2">
+              LLM Connection
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="github" className="space-y-3 mt-3">
             <div className="space-y-1.5">
               <Label htmlFor="gh-token" className="text-xs flex items-center gap-1.5">
-                <KeyRound className="h-3 w-3 text-sector" /> GitHub Personal Access Token
+                <KeyRound className="h-3 w-3 text-muted-foreground" /> GitHub Personal Access Token
               </Label>
               <div className="flex gap-2">
                 <div className="relative flex-1">
@@ -228,14 +225,14 @@ export function SetupPanel({
                     {showGithubToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                   </button>
                 </div>
-                <Button onClick={handleVerifyGithub} disabled={verifyingGithub} size="sm" className="h-9 active-scale">
+                <Button onClick={handleVerifyGithub} disabled={verifyingGithub} size="sm" className="h-9">
                   {verifyingGithub ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Sign in"}
                 </Button>
               </div>
               {githubUser && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-tech" />
-                  Authenticated as <Badge variant="outline" className="text-[10px] font-mono border-people/30 text-people">@{githubUser.login}</Badge>
+                  Authenticated as <Badge variant="outline" className="text-[10px] font-mono">@{githubUser.login}</Badge>
                   {githubUser.name && <span>· {githubUser.name}</span>}
                 </div>
               )}
@@ -245,7 +242,7 @@ export function SetupPanel({
 
             <div className="space-y-1.5">
               <Label htmlFor="owner" className="text-xs flex items-center gap-1.5">
-                <Network className="h-3 w-3 text-problem" /> Organization or User URL
+                <Network className="h-3 w-3 text-muted-foreground" /> Organization or User URL
               </Label>
               <div className="flex gap-2">
                 <Input
@@ -255,15 +252,15 @@ export function SetupPanel({
                   onChange={(e) => setSetup({ ...setup, ownerInput: e.target.value })}
                   className="font-mono text-xs h-9 focus-ring"
                 />
-                <Button onClick={handleResolveOwner} disabled={resolvingOwner} size="sm" className="h-9 active-scale">
+                <Button onClick={handleResolveOwner} disabled={resolvingOwner} size="sm" className="h-9">
                   {resolvingOwner ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Load"}
                 </Button>
               </div>
               {ownerInfo && (
-                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-tech" />
                   Loaded {ownerInfo.kind}
-                  <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">@{ownerInfo.info.login}</Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono">@{ownerInfo.info.login}</Badge>
                   {ownerInfo.info.publicRepos != null && <span>· {ownerInfo.info.publicRepos} public repos</span>}
                   {ownerInfo.info.followers > 0 && <span>· {ownerInfo.info.followers} followers</span>}
                 </div>
@@ -274,15 +271,14 @@ export function SetupPanel({
               onClick={onLoadRepos}
               disabled={!ready}
               size="sm"
-              className="w-full h-10 active-scale transition-all duration-200 text-white hover:shadow-md shadow-sm"
-              style={{ background: "linear-gradient(to right, #40E0D0, #20B2AA)" }}
+              className="w-full h-9"
             >
               {ready ? (
                 <>
-                  Continue to repos <Zap className="h-3.5 w-3.5 ml-1.5 text-sector" />
+                  Continue to repositories <ArrowRight className="h-3.5 w-3.5 ml-1.5" />
                 </>
               ) : (
-                "Sign in + Load org first"
+                "Authenticate and load organization first"
               )}
             </Button>
           </TabsContent>
@@ -291,7 +287,7 @@ export function SetupPanel({
             {/* Provider selector */}
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
-                <Cable className="h-3 w-3 text-methodology" /> Provider
+                <Cable className="h-3 w-3 text-muted-foreground" /> Provider
               </Label>
               <Select
                 value={providerId}
@@ -337,7 +333,7 @@ export function SetupPanel({
             {/* Model selector */}
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center gap-1.5">
-                <Cpu className="h-3 w-3 text-tech" /> Model
+                <Cpu className="h-3 w-3 text-muted-foreground" /> Model
               </Label>
               <Select
                 value={modelExistsInCatalog ? currentModel : "__custom__"}
@@ -383,15 +379,14 @@ export function SetupPanel({
             <div className="space-y-1.5">
               <Label className="text-xs flex items-center justify-between">
                 <span className="flex items-center gap-1.5">
-                  <KeyRound className="h-3 w-3 text-problem" /> API Key
+                  <KeyRound className="h-3 w-3 text-muted-foreground" /> API Key
                 </span>
                 {providerInfo.keyUrl && (
                   <a
                     href={providerInfo.keyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[10px] font-medium hover:underline flex items-center gap-0.5"
-                    style={{ color: "#FFA500" }}
+                    className="text-[10px] font-medium hover:underline flex items-center gap-0.5 text-primary"
                   >
                     get key <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -412,7 +407,7 @@ export function SetupPanel({
                   className={cn(
                     "pr-9 font-mono text-xs h-9 focus-ring",
                     providerInfo.requiresKey && !setup.llmConfig.apiKey &&
-                      "ring-1 ring-sector/20"
+                      "ring-1 ring-primary/20"
                   )}
                 />
                 <button
@@ -425,7 +420,7 @@ export function SetupPanel({
               </div>
               {!providerInfo.requiresKey && (
                 <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <ShieldCheck className="h-2.5 w-2.5" style={{ color: "#40E0D0" }} />
+                  <ShieldCheck className="h-2.5 w-2.5 text-tech" />
                   {providerInfo.sandboxDefault
                     ? "Sandbox default — runs through the pre-authenticated SDK."
                     : "Local server — no key needed."}
@@ -434,7 +429,7 @@ export function SetupPanel({
             </div>
 
             {/* Provider info card */}
-            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-gradient-to-br from-muted/60 to-muted/30 border border-border/80 border-l-4 animate-fade-in-up" style={{ borderLeftColor: "rgba(64, 224, 208, 0.6)" }}>
+            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-lg border bg-muted/30">
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
                   <span className={cn("h-1.5 w-1.5 rounded-full", providerDot)} />
@@ -469,8 +464,7 @@ export function SetupPanel({
               onClick={handlePingLLM}
               disabled={pingingLLM}
               size="sm"
-              className="w-full h-10 active-scale text-white shadow-sm hover:shadow-md transition-all duration-200"
-              style={{ background: "linear-gradient(to right, #40E0D0, #20B2AA)" }}
+              className="w-full h-9"
             >
               {pingingLLM ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
