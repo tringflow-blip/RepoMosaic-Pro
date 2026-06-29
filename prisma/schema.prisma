@@ -50,3 +50,13 @@ model ScanJob {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+// Custom skill group templates uploaded by users
+model SkillGroupTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  templateJson String  // full SkillGroupTemplate JSON (groups + mappings)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}

@@ -1025,3 +1025,46 @@ Stage Summary:
 - All 6 logo colors are used across the UI (no color unused)
 - Zero non-logo color references remain in the codebase
 - Consistent in both light and dark mode
+
+---
+Task ID: 12
+Agent: main (orchestrator)
+Task: Add Skill Group Map feature — re-project skills through organizational perspectives with pre-built + custom templates
+
+Work Log:
+- Designed the SkillGroupTemplate data model with groups, colorKeys, and mapping rules (dimension + pattern + weight)
+- Created `src/lib/analysis/skill-group-templates.ts` — 10 built-in templates:
+  1. Data Scientist (Data Engineering, ML/AI, Statistics, Visualization, Domain)
+  2. AI Engineer (Model Dev, LLM/RAG, MLOps, Data Pipeline, AI Product)
+  3. Front End Engineer (UI Frameworks, Styling, State/Data, Testing, Build/DevOps)
+  4. Back End Engineer (API/Service, Database, Auth/Security, Infra/DevOps, Messaging)
+  5. DevOps Engineer (Containers, CI/CD, IaC, Monitoring, Security)
+  6. Consultant (Domain, Analytical, Communication, Solution Design, Delivery)
+  7. Simulation Engineer (Scientific Computing, Modeling, Visualization, Performance, Validation)
+  8. Full Stack Developer (Frontend, Backend, Database/ORM, DevOps, Product)
+  9. Security Engineer (Auth, Encryption, Compliance, Architecture, Testing)
+  10. Product Engineer (Features, UX, Analytics, API/Integration, Communication)
+- Built applyTemplate() and applyTemplateOrg() functions for re-aggregation
+- Added SkillGroupTemplate Prisma model for saving custom templates
+- Created API route `/api/skill-group-templates` with GET (list), POST (create), DELETE (remove)
+- Built `src/components/repomosaic/skill-group-map-panel.tsx` with:
+  - Template selector dropdown (built-in + custom)
+  - Org-level group cards with avg score + people count
+  - Team ranking table with fitness scores and expandable detail rows
+  - Template groups detail view with mapping badges
+  - Download blank template format / export current template / upload JSON
+  - Create Custom Template dialog with group builder, mapping editor, color picker
+  - Duplicate current template shortcut
+  - Delete custom templates
+- Added "Skill Map" tab to main page (MapPin icon, teal color)
+- Updated keyboard shortcuts to include skillmap tab (position 10)
+- Lint passes clean, no errors
+- Agent-browser verified: templates load, apply correctly, person rankings work, create dialog works
+
+Stage Summary:
+- New "Skill Map" tab provides organizational perspective on skill data
+- 10 built-in templates cover common engineering roles (Data Scientist, AI Engineer, Front End, Back End, DevOps, Consultant, Simulation, Full Stack, Security, Product Engineer)
+- Users can create custom templates via UI builder or upload JSON
+- Template format can be downloaded as a starting point
+- Custom templates are persisted in SQLite via Prisma
+- Each template re-projects the 5 skill dimensions into custom groups with weighted mappings

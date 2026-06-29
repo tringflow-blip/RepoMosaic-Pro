@@ -31,6 +31,7 @@ import {
   ChevronUp,
   Search,
   Keyboard,
+  MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SetupPanel, type SetupState, type OwnerInfo } from "@/components/repomosaic/setup-panel";
@@ -42,6 +43,7 @@ import { PersonDetailPanel } from "@/components/repomosaic/person-detail-panel";
 import { CommitHeatmap } from "@/components/repomosaic/commit-heatmap";
 import { SkillComparison } from "@/components/repomosaic/skill-comparison";
 import { PdfExportButton } from "@/components/repomosaic/pdf-export-button";
+import { SkillGroupMapPanel } from "@/components/repomosaic/skill-group-map-panel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { LLMConfig } from "@/lib/llm/skill-extractor";
@@ -351,14 +353,14 @@ export default function Home() {
         }
       }
       // Tab switching with 1-9
-      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights"];
+      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights", "skillmap"];
       const idx = parseInt(e.key, 10) - 1;
       if (idx >= 0 && idx < tabs.length) {
         const targetTab = tabs[idx];
         // Guard: repos/scan require ownerInfo
         if ((targetTab === "repos" || targetTab === "scan") && !ownerInfo) return;
-        // Guard: graph/people/analytics/activity/compare/insights require skillMap
-        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights") && !skillMap) return;
+        // Guard: graph/people/analytics/activity/compare/insights/skillmap require skillMap
+        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights" || targetTab === "skillmap") && !skillMap) return;
         setActiveTab(targetTab);
         e.preventDefault();
       }
@@ -448,6 +450,9 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="insights" className="text-xs" disabled={!skillMap}>
               <Lightbulb className="h-3.5 w-3.5 mr-1.5 text-sector" /> Insights
+            </TabsTrigger>
+            <TabsTrigger value="skillmap" className="text-xs" disabled={!skillMap}>
+              <MapPin className="h-3.5 w-3.5 mr-1.5 text-tech" /> Skill Map
             </TabsTrigger>
           </TabsList>
 
@@ -775,6 +780,22 @@ export default function Home() {
                 icon={<Lightbulb className="h-6 w-6" />}
                 title="No insights yet"
                 desc="Run a scan to see AI-style recommendations based on skill gaps and team coverage."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="skillmap">
+            {skillMap ? (
+              <SkillGroupMapPanel
+                skillMap={skillMap}
+                onSelectPerson={(p) => setSelectedPerson(p)}
+              />
+            ) : (
+              <EmptyState
+                icon={<MapPin className="h-6 w-6" />}
+                title="No skill group map yet"
+                desc="Run a scan first, then use skill group templates to re-project skills through organizational perspectives."
                 action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
               />
             )}
