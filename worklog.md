@@ -1068,3 +1068,42 @@ Stage Summary:
 - Template format can be downloaded as a starting point
 - Custom templates are persisted in SQLite via Prisma
 - Each template re-projects the 5 skill dimensions into custom groups with weighted mappings
+
+---
+Task ID: 13
+Agent: main (orchestrator)
+Task: Add Person Merge feature — combine multiple GitHub accounts for the same person
+
+Work Log:
+- Designed PersonMergeRule data model: id, org, primaryLogin, mergedLogins[]
+- Created `src/lib/analysis/person-merge.ts` with:
+  - mergePersonRecords(): combines multiple PersonSkillRecords — sums commits/chunks, merges skill arrays (overlapping skills get summed scores), merges activity/ownership/allTags
+  - applyMergeRules(): applies a set of rules to an AdvancedSkillMap, producing a new map with merged people and recalculated org rollups
+  - MergedPersonSkillRecord type with optional mergedLogins field for UI display
+  - isMergedPerson() type guard
+- Added PersonMerge Prisma model: id, org, primaryLogin, mergedLogins (JSON), timestamps, unique on [org, primaryLogin]
+- Created API route `/api/person-merge` with GET (list by org), POST (create with conflict check), PUT (update primary/logins), DELETE (remove rule)
+- Built `src/components/repomosaic/person-merge-panel.tsx` with:
+  - "Merge Accounts" button to enter merge selection mode
+  - Selection mode: checkbox list of unmerged people, "Merge N" confirmation
+  - Confirm merge dialog: choose primary account (name/avatar used), info about what will happen
+  - Active merges display with unmerge buttons
+  - "Manage Merges" dialog: view all rules, unmerge, change primary account
+  - Merged people preview with "Merged" badge showing all combined logins
+- Integrated into main page:
+  - Added mergeRules state and mergedSkillMap computed via useMemo
+  - All display components (graph, people, analytics, activity, compare, insights, skillmap) now use mergedSkillMap
+  - Raw skillMap preserved for export and as source of truth
+  - Merge rules auto-loaded when skillMap is available
+  - handleMerge/handleUnmerge/handleChangePrimary API handlers
+- Lint passes clean, no errors
+
+Stage Summary:
+- New "Merge Accounts" feature in the People tab
+- Users can select 2+ GitHub accounts and merge them into one person
+- Merged person combines all commits, skills, activity data
+- Primary account's name/avatar is used for display
+- Merge rules are persisted in SQLite — survive page refreshes and re-scans
+- "Unmerge" available at any time to split accounts back
+- "Change primary" lets users switch which account's identity is displayed
+- All tabs (graph, analytics, etc.) automatically reflect merged data
