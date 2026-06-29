@@ -1373,4 +1373,42 @@ Stage Summary:
 - Next scan of Gaia-Recipe will show actual organization member names
 - The profile enrichment step adds ~200ms per 5 logins (batched) - non-fatal on failure
 - All dimension colors are now muted/sophisticated versions of the original logo palette
+
+---
+Task ID: 14
+Agent: Main Orchestrator
+Task: Add Problem-Contributor Matching (Assign tab) + Redesign Commit Activity with year selector
+
+Work Log:
+- Created `/api/match-problem` API route that uses LLM to analyze a problem description against contributor skills
+  - Builds compact person profiles from skillMap data
+  - Sends to LLM with structured prompt asking for required skills, ranked contributors with match scores, and team gaps
+  - Returns JSON with rankings (score 0-100), match breakdown per dimension, justification, strengths/gaps
+- Created `ProblemMatchPanel` component (`src/components/repomosaic/problem-match-panel.tsx`, ~910 lines)
+  - Problem input textarea with 4 example problem chips
+  - Loading skeleton while LLM processes
+  - Results section: Strategic Recommendation card, Required Skills bar (grouped by dimension), Ranked Contributors with mini SVG radar charts
+  - Each ranked contributor shows: rank badge, avatar, match score with color coding, 5-dimension radar chart, dimension mini-bars, justification, strength/gap badges
+  - Team Gaps card at bottom
+  - Expandable detail section per contributor
+- Redesigned `CommitHeatmap` component (`src/components/repomosaic/commit-heatmap.tsx`, ~610 lines)
+  - Year selector pills: "All" + year pills from (earliest-1) to latest, each showing commit count
+  - Left/right scroll buttons for mobile
+  - Year-specific heatmap grid (Jan 1 - Dec 31) vs "All" mode (52-week trailing)
+  - Summary stats with year-over-year commit trend (% up/down vs previous year)
+  - Yearly Overview bar chart below heatmap with clickable bars
+- Added "Assign" tab to page.tsx (11th tab, keyboard shortcut: key "0")
+- Verified all features work with agent-browser:
+  - Activity tab shows year pills (All, 2024, 2025) with counts
+  - Year selection filters heatmap and updates stats
+  - Yearly overview bar chart renders with clickable bars
+  - Assign tab shows Problem Matcher with example chips
+  - Analysis returns ranked contributors with radar charts and match breakdowns
+  - Team gaps section shows missing skills
+
+Stage Summary:
+- **New "Assign" tab** - Problem-Contributor matching powered by LLM
+- **Redesigned Activity tab** - Year selector, year-specific heatmaps, yearly bar chart
+- Both features verified working end-to-end via agent-browser
+- API route `/api/match-problem` successfully integrates with z-ai-web-dev-sdk
 - Lint passes cleanly, dev server compiles without errors

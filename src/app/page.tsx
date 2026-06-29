@@ -28,6 +28,7 @@ import {
   Search,
   Keyboard,
   MapPin,
+  Crosshair,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SetupPanel, type SetupState, type OwnerInfo } from "@/components/repomosaic/setup-panel";
@@ -41,6 +42,7 @@ import { SkillComparison } from "@/components/repomosaic/skill-comparison";
 import { PdfExportButton } from "@/components/repomosaic/pdf-export-button";
 import { SkillGroupMapPanel } from "@/components/repomosaic/skill-group-map-panel";
 import { PersonMergePanel } from "@/components/repomosaic/person-merge-panel";
+import { ProblemMatchPanel } from "@/components/repomosaic/problem-match-panel";
 import { applyMergeRules, type PersonMergeRule } from "@/lib/analysis/person-merge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -459,14 +461,14 @@ export default function Home() {
         }
       }
       // Tab switching with 1-9
-      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights", "skillmap"];
+      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights", "skillmap", "assign"];
       const idx = parseInt(e.key, 10) - 1;
       if (idx >= 0 && idx < tabs.length) {
         const targetTab = tabs[idx];
         // Guard: repos/scan require ownerInfo
         if ((targetTab === "repos" || targetTab === "scan") && !ownerInfo) return;
         // Guard: graph/people/analytics/activity/compare/insights/skillmap require skillMap
-        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights" || targetTab === "skillmap") && !skillMap) return;
+        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights" || targetTab === "skillmap" || targetTab === "assign") && !skillMap) return;
         setActiveTab(targetTab);
         e.preventDefault();
       }
@@ -559,6 +561,9 @@ export default function Home() {
             </TabsTrigger>
             <TabsTrigger value="skillmap" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
               Skill Map
+            </TabsTrigger>
+            <TabsTrigger value="assign" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
+              Assign
             </TabsTrigger>
           </TabsList>
 
@@ -899,6 +904,23 @@ export default function Home() {
                 icon={<MapPin className="h-6 w-6" />}
                 title="No skill group map yet"
                 desc="Run a scan first, then use skill group templates to re-project skills through organizational perspectives."
+                action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
+              />
+            )}
+          </TabsContent>
+
+          <TabsContent value="assign">
+            {mergedSkillMap ? (
+              <ProblemMatchPanel
+                skillMap={mergedSkillMap}
+                llmConfig={setup.llmConfig}
+                onSelectPerson={(p) => setSelectedPerson(p)}
+              />
+            ) : (
+              <EmptyState
+                icon={<Crosshair className="h-6 w-6" />}
+                title="No assignment data yet"
+                desc="Run a scan first, then describe a problem to find the best-suited contributors."
                 action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
               />
             )}
