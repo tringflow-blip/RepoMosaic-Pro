@@ -33,6 +33,9 @@ import {
   ExternalLink,
   Cpu,
   ShieldCheck,
+  Lock,
+  Unlock,
+  FileSearch,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/components/theme-provider";
@@ -49,6 +52,11 @@ export type SetupState = {
   githubToken: string;
   ownerInput: string;
   llmConfig: LLMConfig;
+  /** When true, scan only repository metadata (name, description, language, topics, etc.)
+   *  instead of cloning/fetching full commit contents. Useful for privacy and speed. */
+  metadataOnly: boolean;
+  /** When true, the metadataOnly toggle is locked and cannot be changed. */
+  metadataOnlyLocked: boolean;
 };
 
 export type OwnerInfo = {
@@ -179,14 +187,13 @@ export function SetupPanel({
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle className="flex items-center gap-2">
-              <div className="h-6 w-6 rounded-md gradient-sector flex items-center justify-center">
+              <div className="h-6 w-6 rounded-md gradient-primary flex items-center justify-center">
                 <Settings2 className="h-3.5 w-3.5 text-white" />
               </div>
               Setup
             </CardTitle>
             <CardDescription className="mt-1.5">
-              Connect GitHub and pick an LLM provider. The sandbox default needs no
-              key — add one only when you switch to a hosted provider.
+              Connect GitHub and pick an LLM provider.
             </CardDescription>
           </div>
           <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme" className="shrink-0 active-scale">
@@ -250,7 +257,7 @@ export function SetupPanel({
               <div className="flex gap-2">
                 <Input
                   id="owner"
-                  placeholder="https://github.com/Gaia-Recipe"
+                  placeholder="https://github.com/your-org"
                   value={setup.ownerInput}
                   onChange={(e) => setSetup({ ...setup, ownerInput: e.target.value })}
                   className="font-mono text-xs h-9 focus-ring"
@@ -263,9 +270,72 @@ export function SetupPanel({
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1.5 animate-fade-in-up">
                   <CheckCircle2 className="h-3.5 w-3.5 text-tech" />
                   Loaded {ownerInfo.kind}
-                  <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">@{ownerInfo.info.login}</Badge>
+                  <Badge variant="outline" className="text-[10px] font-mono gradient-primary text-white border-0">@{ownerInfo.info.login}</Badge>
                   {ownerInfo.info.publicRepos != null && <span>· {ownerInfo.info.publicRepos} public repos</span>}
                   {ownerInfo.info.followers > 0 && <span>· {ownerInfo.info.followers} followers</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Metadata-only scan toggle */}
+            <div className="rounded-xl border p-3 space-y-2 animate-fade-in-up" style={{ borderColor: setup.metadataOnly ? 'rgba(0, 166, 125, 0.3)' : undefined, backgroundColor: setup.metadataOnly ? 'rgba(0, 166, 125, 0.04)' : undefined }}>
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-xs flex items-center gap-1.5 cursor-pointer">
+                  <FileSearch className="h-3.5 w-3.5" style={{ color: '#00A67D' }} />
+                  Metadata-only scan
+                </Label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!setup.metadataOnlyLocked) {
+                        setSetup({ ...setup, metadataOnly: !setup.metadataOnly });
+                      }
+                    }}
+                    className={cn(
+                      "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus-ring",
+                      setup.metadataOnly ? "bg-primary" : "bg-muted-foreground/30"
+                    )}
+                    disabled={setup.metadataOnlyLocked}
+                    aria-label="Toggle metadata-only scan"
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform shadow-sm",
+                        setup.metadataOnly ? "translate-x-4" : "translate-x-0.5"
+                      )}
+                    />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSetup({ ...setup, metadataOnlyLocked: !setup.metadataOnlyLocked })}
+                    className={cn(
+                      "h-5 w-5 rounded flex items-center justify-center transition-colors",
+                      setup.metadataOnlyLocked
+                        ? "hover:bg-primary/10"
+                        : "text-muted-foreground hover:bg-muted"
+                    )}
+                    style={{ color: setup.metadataOnlyLocked ? '#00A67D' : undefined }}
+                    aria-label={setup.metadataOnlyLocked ? "Unlock metadata-only toggle" : "Lock metadata-only toggle"}
+                  >
+                    {setup.metadataOnlyLocked ? (
+                      <Lock className="h-3 w-3" />
+                    ) : (
+                      <Unlock className="h-3 w-3" />
+                    )}
+                  </button>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
+                {setup.metadataOnly
+                  ? "Scan will analyze repository metadata only (name, description, language, topics, README) — no commit contents are accessed. Faster and more private."
+                  : "Scan will fetch and analyze commit contents for deep skill attribution. Switch to metadata-only for privacy or speed."
+                }
+              </p>
+              {setup.metadataOnlyLocked && (
+                <div className="flex items-center gap-1 text-[10px]" style={{ color: '#00A67D' }}>
+                  <Lock className="h-2.5 w-2.5" />
+                  Toggle locked — click the lock icon to unlock
                 </div>
               )}
             </div>
@@ -275,7 +345,7 @@ export function SetupPanel({
               disabled={!ready}
               size="sm"
               className="w-full h-10 active-scale transition-all duration-200 text-white hover:shadow-md shadow-sm"
-              style={{ background: "linear-gradient(to right, #40E0D0, #20B2AA)" }}
+              style={{ background: "linear-gradient(to right, #00A67D, #0D9488)" }}
             >
               {ready ? (
                 <>
@@ -323,8 +393,8 @@ export function SetupPanel({
                         <span className="font-medium">{p.label}</span>
                         <span className="text-muted-foreground text-[10px]">· {p.tagline}</span>
                         {p.sandboxDefault && (
-                          <Badge variant="outline" className="text-[9px] py-0.5 px-1.5 ml-1 border font-semibold" style={{ backgroundColor: "rgba(64, 224, 208, 0.15)", color: "#008B8B", borderColor: "rgba(64, 224, 208, 0.3)" }}>
-                            no key
+                          <Badge variant="outline" className="text-[9px] py-0.5 px-1.5 ml-1 border font-semibold" style={{ backgroundColor: "rgba(0, 166, 125, 0.1)", color: "#0F766E", borderColor: "rgba(0, 166, 125, 0.25)" }}>
+                            Pre-configured
                           </Badge>
                         )}
                       </div>
@@ -391,7 +461,7 @@ export function SetupPanel({
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-[10px] font-medium hover:underline flex items-center gap-0.5"
-                    style={{ color: "#FFA500" }}
+                    style={{ color: "#00A67D" }}
                   >
                     get key <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -403,7 +473,7 @@ export function SetupPanel({
                   placeholder={
                     providerInfo.requiresKey
                       ? `Paste your ${providerInfo.label} key…`
-                      : "Optional — leave blank to use the default"
+                      : "Optional"
                   }
                   value={setup.llmConfig.apiKey ?? ""}
                   onChange={(e) =>
@@ -425,16 +495,16 @@ export function SetupPanel({
               </div>
               {!providerInfo.requiresKey && (
                 <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <ShieldCheck className="h-2.5 w-2.5" style={{ color: "#40E0D0" }} />
+                  <ShieldCheck className="h-2.5 w-2.5" style={{ color: "#00A67D" }} />
                   {providerInfo.sandboxDefault
-                    ? "Sandbox default — runs through the pre-authenticated SDK."
+                    ? "Pre-configured — runs through the built-in SDK."
                     : "Local server — no key needed."}
                 </p>
               )}
             </div>
 
             {/* Provider info card */}
-            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-gradient-to-br from-muted/60 to-muted/30 border border-border/80 border-l-4 animate-fade-in-up" style={{ borderLeftColor: "rgba(64, 224, 208, 0.6)" }}>
+            <div className="text-[11px] text-muted-foreground space-y-1.5 p-3 rounded-xl bg-gradient-to-br from-muted/60 to-muted/30 border border-border/80 border-l-4 animate-fade-in-up" style={{ borderLeftColor: "rgba(0, 166, 125, 0.5)" }}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-semibold text-foreground text-xs flex items-center gap-1.5">
                   <span className={cn("h-1.5 w-1.5 rounded-full", providerDot)} />
@@ -470,7 +540,7 @@ export function SetupPanel({
               disabled={pingingLLM}
               size="sm"
               className="w-full h-10 active-scale text-white shadow-sm hover:shadow-md transition-all duration-200"
-              style={{ background: "linear-gradient(to right, #40E0D0, #20B2AA)" }}
+              style={{ background: "linear-gradient(to right, #00A67D, #0D9488)" }}
             >
               {pingingLLM ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />

@@ -57,8 +57,10 @@ export default function Home() {
 
   const [setup, setSetup] = useState<SetupState>({
     githubToken: "",
-    ownerInput: "https://github.com/Gaia-Recipe",
+    ownerInput: "",
     llmConfig: { provider: "zai", model: "glm-4-plus" },
+    metadataOnly: false,
+    metadataOnlyLocked: false,
   });
   const [githubUser, setGithubUser] = useState<{ login: string; name: string | null; avatarUrl: string } | null>(null);
   const [ownerInfo, setOwnerInfo] = useState<{ kind: "org" | "user"; info: OwnerInfo } | null>(null);
@@ -483,19 +485,19 @@ export default function Home() {
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
-      <header className="border-b shadow-sm bg-background/80 backdrop-blur-md sticky top-0 z-10">
+      <header className="border-b shadow-sm bg-background/80 backdrop-blur-md sticky top-0 z-10" style={{ borderBottomColor: 'rgba(0, 166, 125, 0.15)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-soft ring-1 ring-border/40 hover:scale-105 transition-transform cursor-pointer">
+            <div className="h-10 w-10 rounded-xl overflow-hidden shrink-0 shadow-soft ring-2 hover:scale-105 transition-transform cursor-pointer" style={{ ringColor: 'rgba(0, 166, 125, 0.25)' }}>
               <img
                 src="/logo.png"
-                alt="RepoMosaic Pro logo"
+                alt="Mosaic Pro logo"
                 className="h-full w-full object-cover"
               />
             </div>
             <div className="min-w-0">
-              <h1 className="text-sm sm:text-base font-semibold tracking-tight truncate">
-                RepoMosaic Pro
+              <h1 className="text-sm sm:text-base font-semibold tracking-tight truncate" style={{ color: '#0F766E' }}>
+                Mosaic Pro
               </h1>
               <p className="text-[10px] text-muted-foreground hidden sm:block">
                 Multi-dimensional skill attribution for GitHub organizations
@@ -513,7 +515,7 @@ export default function Home() {
               </Badge>
             )}
             {ownerInfo && (
-              <Badge variant="outline" className="text-[10px] font-mono gradient-sector text-white border-0">
+              <Badge variant="outline" className="text-[10px] font-mono gradient-primary text-white border-0">
                 {ownerInfo.kind}: {ownerInfo.info.login}
               </Badge>
             )}
@@ -581,22 +583,22 @@ export default function Home() {
               />
               <div className="mt-4 grid sm:grid-cols-3 gap-3">
                 <FeatureChip
-                  icon={<Cable className="h-4 w-4 text-sector" />}
+                  icon={<Cable className="h-4 w-4 text-white" />}
                   title="LLM Skill Attribution"
                   desc="Each commit chunk → multi-dim JSON tags"
-                  gradient="gradient-sector"
+                  gradient="gradient-primary"
                 />
                 <FeatureChip
-                  icon={<Boxes className="h-4 w-4 text-methodology" />}
+                  icon={<Boxes className="h-4 w-4 text-white" />}
                   title="5 Dimensions"
                   desc="Sector · Problem · Tech · Methodology · Role"
-                  gradient="gradient-methodology"
+                  gradient="gradient-tech"
                 />
                 <FeatureChip
-                  icon={<Database className="h-4 w-4 text-problem" />}
+                  icon={<Database className="h-4 w-4 text-white" />}
                   title="Smart Caching"
                   desc="Re-loads last scan instantly · Prisma SQLite"
-                  gradient="gradient-problem"
+                  gradient="gradient-methodology"
                 />
               </div>
               {/* Welcome / Onboarding for first-time visitors */}
@@ -605,21 +607,21 @@ export default function Home() {
                   <h3 className="text-sm font-semibold text-center">How it works</h3>
                   <div className="grid sm:grid-cols-3 gap-4 text-center">
                     <div className="space-y-1.5">
-                      <div className="h-10 w-10 rounded-full bg-sector/10 text-sector flex items-center justify-center mx-auto">
+                      <div className="h-10 w-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(0, 166, 125, 0.1)', color: '#00A67D' }}>
                         <KeyRound className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-medium">1. Connect GitHub</p>
                       <p className="text-[10px] text-muted-foreground">Paste a personal access token and pick an org or user</p>
                     </div>
                     <div className="space-y-1.5">
-                      <div className="h-10 w-10 rounded-full bg-methodology/10 text-methodology flex items-center justify-center mx-auto">
+                      <div className="h-10 w-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(138, 43, 226, 0.1)', color: '#8A2BE2' }}>
                         <Cable className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-medium">2. Scan commits</p>
                       <p className="text-[10px] text-muted-foreground">Select repos and run the skill attribution scan</p>
                     </div>
                     <div className="space-y-1.5">
-                      <div className="h-10 w-10 rounded-full bg-tech/10 text-tech flex items-center justify-center mx-auto">
+                      <div className="h-10 w-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(64, 224, 208, 0.1)', color: '#40E0D0' }}>
                         <Network className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-medium">3. Explore skills</p>
@@ -632,7 +634,7 @@ export default function Home() {
               {mergedSkillMap && (
                 <div className="mt-4 rounded-xl border bg-card p-4 shadow-soft animate-fade-in-up">
                   <div className="flex items-center gap-2 mb-3">
-                    <Zap className="h-4 w-4 text-sector" />
+                    <Zap className="h-4 w-4" style={{ color: '#00A67D' }} />
                     <span className="text-sm font-semibold">Last Scan Summary</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -685,7 +687,7 @@ export default function Home() {
                 </Button>
               )}
               {scanStatus?.status === "cancelled" && skillMap && (
-                <Button variant="outline" className="w-full active-scale border-sector/50 text-sector hover:bg-sector/10" onClick={() => setActiveTab("graph")}>
+                <Button variant="outline" className="w-full active-scale hover:bg-accent" style={{ borderColor: 'rgba(0, 166, 125, 0.4)', color: '#00A67D' }} onClick={() => setActiveTab("graph")}>
                   View partial results <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               )}
@@ -925,12 +927,12 @@ export default function Home() {
       </main>
 
       {/* Footer */}
-      <footer className="mt-auto border-t bg-background/80 backdrop-blur-sm">
+      <footer className="mt-auto border-t bg-background/80 backdrop-blur-sm" style={{ borderTopColor: 'rgba(0, 166, 125, 0.12)' }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-1.5">
-              <div className="h-4 w-4 rounded gradient-sector shrink-0" />
-              <span className="font-medium">RepoMosaic Pro</span>
+              <div className="h-4 w-4 rounded gradient-primary shrink-0" />
+              <span className="font-medium" style={{ color: '#0F766E' }}>Mosaic Pro</span>
               <span className="text-border">·</span>
               <span>Skill Attribution</span>
             </div>
@@ -959,7 +961,16 @@ export default function Home() {
                 <RefreshCw className="h-3 w-3 mr-1 animate-spin" /> scan running…
               </Button>
             )}
-            <span>Built with <Heart className="h-2.5 w-2.5 inline text-sector" /> for engineering teams</span>
+            <a
+              href="https://github.com/tringflow-blip/RepoMosaic-Pro-Advanced"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:underline transition-colors"
+              style={{ color: '#00A67D' }}
+            >
+              <Download className="h-3 w-3" />
+              Documentation
+            </a>
           </div>
         </div>
       </footer>
