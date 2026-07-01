@@ -223,6 +223,18 @@ async function runScan(jobId: string, params: {
           byAuthor.get(key)!.push(c);
         }
 
+        // Also populate personMeta from commit author data
+        for (const c of commits) {
+          if (c.authorLogin && !personMeta.has(c.authorLogin)) {
+            personMeta.set(c.authorLogin, {
+              login: c.authorLogin,
+              name: c.authorLogin, // Will be enriched later
+              avatarUrl: c.authorAvatar ?? "",
+              url: `https://github.com/${c.authorLogin}`,
+            });
+          }
+        }
+
         for (const [authorKey, authorCommits] of byAuthor.entries()) {
           if (job.cancelRequested) break;
           const chunks = chunkCommits(authorCommits, params.commitsPerChunk);
@@ -342,6 +354,48 @@ async function runScan(jobId: string, params: {
       job.provider = lastProvider;
       job.phase = "aggregate";
       job.message = "Aggregating skills…";
+    }
+
+    // Enrich personMeta with real GitHub profile data
+    job.phase = "enrich";
+    job.message = "Enriching contributor profiles…";
+    try {
+      // Collect all unique logins
+      const allLogins = new Set<string>(personMeta.keys());
+      // Also check extractions for any authorLogins not yet in personMeta
+      for (const ext of extractions) {
+        if (ext.authorLogin && !personMeta.has(ext.authorLogin)) {
+          allLogins.add(ext.authorLogin);
+        }
+      }
+      const { enrichContributorProfiles } = await import("@/lib/github/client");
+      const profiles = await enrichContributorProfiles(params.token, Array.from(allLogins));
+      for (const [login, profile] of profiles.entries()) {
+        const existing = personMeta.get(login);
+        if (existing) {
+          // Update existing entry with real name (only if current name is just the login)
+          if (existing.name === existing.login || !existing.name) {
+            existing.name = profile.name;
+          }
+          if (!existing.avatarUrl && profile.avatarUrl) {
+            existing.avatarUrl = profile.avatarUrl;
+          }
+          if (!existing.url && profile.url) {
+            existing.url = profile.url;
+          }
+        } else {
+          // Add missing login to personMeta
+          personMeta.set(login, {
+            login,
+            name: profile.name,
+            avatarUrl: profile.avatarUrl,
+            url: profile.url,
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Profile enrichment failed:", (err as Error).message);
+      // Non-fatal: continue with whatever names we have
     }
 
     const skillMap = aggregateSkillMap({

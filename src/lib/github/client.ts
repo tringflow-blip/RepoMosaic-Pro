@@ -347,6 +347,41 @@ export async function listContributors(
     }));
 }
 
+/**
+ * Enrich contributor profiles by fetching real display names and avatar URLs
+ * from the GitHub Users API. Processes logins in batches of 5 with a small
+ * delay between batches to avoid rate limiting.
+ */
+export async function enrichContributorProfiles(
+  token: string,
+  logins: string[]
+): Promise<Map<string, { name: string; avatarUrl: string; url: string }>> {
+  const octokit = createOctokit(token);
+  const result = new Map<string, { name: string; avatarUrl: string; url: string }>();
+  // Process in batches of 5 to avoid rate limiting
+  for (let i = 0; i < logins.length; i += 5) {
+    const batch = logins.slice(i, i + 5);
+    const promises = batch.map(async (login) => {
+      try {
+        const { data } = await octokit.rest.users.getByUsername({ username: login });
+        result.set(login, {
+          name: data.name ?? login,
+          avatarUrl: data.avatar_url ?? "",
+          url: data.html_url ?? "",
+        });
+      } catch {
+        result.set(login, { name: login, avatarUrl: "", url: `https://github.com/${login}` });
+      }
+    });
+    await Promise.all(promises);
+    // Small delay between batches to be gentle on rate limits
+    if (i + 5 < logins.length) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+  return result;
+}
+
 export type FileNode = {
   path: string;
   type: "file" | "dir";
