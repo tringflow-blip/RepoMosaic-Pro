@@ -7,7 +7,7 @@ Task: Save GitHub repo URL and token to .env file
 
 Work Log:
 - Added GITHUB_REPO_URL and GITHUB_TOKEN to .env file
-- Token: [REDACTED]
+- Token: [saved in .env file - not displayed for security]
 - Repo: https://github.com/tringflow-blip/RepoMosaic-Pro.git
 
 Stage Summary:
