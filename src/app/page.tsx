@@ -7,7 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Github,
+  Sparkles,
   Cable,
+  KeyRound,
   Boxes,
   Users,
   BarChart3,
@@ -18,7 +20,9 @@ import {
   RefreshCw,
   Activity,
   GitCommit,
+  Zap,
   ArrowRight,
+  Heart,
   ArrowLeftRight,
   Lightbulb,
   TrendingUp,
@@ -464,14 +468,14 @@ export default function Home() {
         }
       }
       // Tab switching with 1-9
-      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights", "skillmap", "assign"];
+      const tabs = ["setup", "repos", "scan", "graph", "people", "analytics", "activity", "compare", "insights", "skillmap", "match"];
       const idx = parseInt(e.key, 10) - 1;
       if (idx >= 0 && idx < tabs.length) {
         const targetTab = tabs[idx];
         // Guard: repos/scan require ownerInfo
         if ((targetTab === "repos" || targetTab === "scan") && !ownerInfo) return;
         // Guard: graph/people/analytics/activity/compare/insights/skillmap require skillMap
-        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights" || targetTab === "skillmap" || targetTab === "assign") && !skillMap) return;
+        if ((targetTab === "graph" || targetTab === "people" || targetTab === "analytics" || targetTab === "activity" || targetTab === "compare" || targetTab === "insights" || targetTab === "skillmap" || targetTab === "match") && !skillMap) return;
         setActiveTab(targetTab);
         e.preventDefault();
       }
@@ -498,18 +502,13 @@ export default function Home() {
                 Mosaic Pro
               </h1>
               <p className="text-[10px] text-muted-foreground hidden sm:block">
-                Skill Attribution Platform
+                Multi-dimensional skill attribution for GitHub organizations
               </p>
             </div>
-            {ownerInfo && (
-              <Badge variant="outline" className="text-[10px] font-mono text-muted-foreground ml-1 hidden sm:inline-flex">
-                {ownerInfo.kind === "org" ? "Organization" : "User"}: {ownerInfo.info.login}
-              </Badge>
-            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {githubUser && (
-              <Badge variant="outline" className="text-[10px] font-mono gap-1">
+              <Badge variant="outline" className="text-[10px] font-mono gap-1 border-people/30 text-people">
                 <Avatar className="h-4 w-4">
                   <AvatarImage src={githubUser.avatarUrl} />
                   <AvatarFallback className="text-[8px]">{githubUser.login[0]}</AvatarFallback>
@@ -524,10 +523,10 @@ export default function Home() {
             )}
             {skillMap && (
               <>
-                <Button size="sm" variant="ghost" onClick={() => exportData("json")} className="h-7 text-[11px]">
+                <Button size="sm" variant="outline" onClick={() => exportData("json")} className="h-7 text-[11px] active-scale">
                   <Download className="h-3 w-3 mr-1" /> JSON
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => exportData("markdown")} className="h-7 text-[11px]">
+                <Button size="sm" variant="outline" onClick={() => exportData("markdown")} className="h-7 text-[11px] active-scale">
                   <Download className="h-3 w-3 mr-1" /> MD
                 </Button>
               </>
@@ -537,41 +536,41 @@ export default function Home() {
       </header>
 
       {/* Main */}
-      <main className="flex-1 w-full px-4 sm:px-6 py-6">
+      <main className="flex-1 w-full px-4 sm:px-6 lg:px-8 py-6">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-6 flex-wrap h-auto bg-transparent border-b p-0 rounded-none gap-0">
-            <TabsTrigger value="setup" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors">
-              Setup
+          <TabsList className="mb-5 flex-wrap h-auto bg-muted/50 p-1 rounded-lg">
+            <TabsTrigger value="setup" className="text-xs data-[state=active]:text-primary">
+              <Sparkles className="h-3.5 w-3.5 mr-1.5" /> Setup
             </TabsTrigger>
-            <TabsTrigger value="repos" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!ownerInfo}>
-              Repos
+            <TabsTrigger value="repos" className="text-xs data-[state=active]:text-primary" disabled={!ownerInfo}>
+              <Github className="h-3.5 w-3.5 mr-1.5" /> Repos
             </TabsTrigger>
-            <TabsTrigger value="scan" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!ownerInfo}>
-              Scan
+            <TabsTrigger value="scan" className="text-xs data-[state=active]:text-primary" disabled={!ownerInfo}>
+              <Loader2 className="h-3.5 w-3.5 mr-1.5" /> Scan
             </TabsTrigger>
-            <TabsTrigger value="graph" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Skill Graph
+            <TabsTrigger value="graph" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <Network className="h-3.5 w-3.5 mr-1.5" /> Skill Graph
             </TabsTrigger>
-            <TabsTrigger value="people" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              People
+            <TabsTrigger value="people" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <Users className="h-3.5 w-3.5 mr-1.5" /> People
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Analytics
+            <TabsTrigger value="analytics" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <BarChart3 className="h-3.5 w-3.5 mr-1.5" /> Analytics
             </TabsTrigger>
-            <TabsTrigger value="activity" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Activity
+            <TabsTrigger value="activity" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <Activity className="h-3.5 w-3.5 mr-1.5" /> Activity
             </TabsTrigger>
-            <TabsTrigger value="compare" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Compare
+            <TabsTrigger value="compare" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <ArrowLeftRight className="h-3.5 w-3.5 mr-1.5" /> Compare
             </TabsTrigger>
-            <TabsTrigger value="insights" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Insights
+            <TabsTrigger value="insights" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <Lightbulb className="h-3.5 w-3.5 mr-1.5" /> Insights
             </TabsTrigger>
-            <TabsTrigger value="skillmap" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Skill Map
+            <TabsTrigger value="skillmap" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <MapPin className="h-3.5 w-3.5 mr-1.5" /> Skill Map
             </TabsTrigger>
-            <TabsTrigger value="assign" className="text-[11px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:text-foreground data-[state=active]:font-medium px-3 py-2 text-muted-foreground hover:text-foreground transition-colors" disabled={!skillMap}>
-              Assign
+            <TabsTrigger value="match" className="text-xs data-[state=active]:text-primary" disabled={!skillMap}>
+              <Crosshair className="h-3.5 w-3.5 mr-1.5" /> Match
             </TabsTrigger>
           </TabsList>
 
@@ -587,7 +586,7 @@ export default function Home() {
                 ownerInfo={ownerInfo}
                 onLoadRepos={loadRepos}
               />
-              <div className="mt-4 grid sm:grid-cols-3 gap-0 divide-x divide-border">
+              <div className="mt-4 grid sm:grid-cols-3 gap-3">
                 <FeatureChip
                   icon={<Cable className="h-4 w-4 text-white" />}
                   title="LLM Skill Attribution"
@@ -609,29 +608,29 @@ export default function Home() {
               </div>
               {/* Welcome / Onboarding for first-time visitors */}
               {!githubUser && !ownerInfo && (
-                <div className="mt-6 border-t pt-5">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-4">How it works</h3>
-                  <div className="grid sm:grid-cols-3 gap-6">
+                <div className="mt-6 rounded-xl border border-dashed border-border/60 bg-muted/20 p-5 space-y-4">
+                  <h3 className="text-sm font-semibold text-center">How it works</h3>
+                  <div className="grid sm:grid-cols-3 gap-4 text-center">
                     <div className="space-y-1.5">
                       <div className="h-10 w-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(0, 150, 136, 0.1)', color: '#009688' }}>
                         <KeyRound className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-medium">1. Connect GitHub</p>
-                      <p className="text-[11px] text-muted-foreground">Paste a personal access token and pick an org or user</p>
+                      <p className="text-[10px] text-muted-foreground">Paste a personal access token and pick an org or user</p>
                     </div>
                     <div className="space-y-1.5">
                       <div className="h-10 w-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(138, 43, 226, 0.1)', color: '#8A2BE2' }}>
                         <Cable className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-medium">2. Scan commits</p>
-                      <p className="text-[11px] text-muted-foreground">Select repos and run the skill attribution scan</p>
+                      <p className="text-[10px] text-muted-foreground">Select repos and run the skill attribution scan</p>
                     </div>
                     <div className="space-y-1.5">
                       <div className="h-10 w-10 rounded-full flex items-center justify-center mx-auto" style={{ backgroundColor: 'rgba(64, 224, 208, 0.1)', color: '#40E0D0' }}>
                         <Network className="h-5 w-5" />
                       </div>
                       <p className="text-xs font-medium">3. Explore skills</p>
-                      <p className="text-[11px] text-muted-foreground">Browse the skill graph, compare people, export reports</p>
+                      <p className="text-[10px] text-muted-foreground">Browse the skill graph, compare people, export reports</p>
                     </div>
                   </div>
                 </div>
@@ -640,7 +639,7 @@ export default function Home() {
               {mergedSkillMap && (
                 <div className="mt-4 rounded-xl border bg-card p-4 shadow-soft animate-fade-in-up">
                   <div className="flex items-center gap-2 mb-3">
-                    <Zap className="h-4 w-4" style={{ color: '#009688' }} />
+                    <Zap className="h-4 w-4 text-primary" />
                     <span className="text-sm font-semibold">Last Scan Summary</span>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -650,9 +649,9 @@ export default function Home() {
                     <QuickStat label="Repos" value={mergedSkillMap.totalRepos} icon={<Github className="h-3.5 w-3.5" />} color="text-problem" />
                   </div>
                   <Button
-                    variant="ghost"
+                    variant="outline"
                     size="sm"
-                    className="mt-3 w-full"
+                    className="mt-3 w-full active-scale"
                     onClick={() => setActiveTab("graph")}
                   >
                     View Skill Graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
@@ -688,7 +687,7 @@ export default function Home() {
             <div className="max-w-2xl mx-auto space-y-4">
               <ScanProgressPanel status={scanStatus} onCancel={cancelScan} />
               {scanStatus?.status === "completed" && skillMap && (
-                <Button className="w-full" onClick={() => setActiveTab("graph")}>
+                <Button className="w-full active-scale" onClick={() => setActiveTab("graph")}>
                   View skill graph <ArrowRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               )}
@@ -788,7 +787,7 @@ export default function Home() {
           <TabsContent value="activity">
             {mergedSkillMap ? (
               <div className="space-y-6">
-                <div className="rounded-xl border bg-card p-5">
+                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up">
                   <div className="flex items-center gap-2 mb-4">
                     <Activity className="h-4 w-4 text-problem" />
                     <h3 className="text-sm font-semibold">Commit Activity</h3>
@@ -814,9 +813,10 @@ export default function Home() {
                 </div>
 
                 {/* People Activity Ranking */}
-                <div className="rounded-xl border bg-card p-5">
+                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up stagger-1">
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contributor Activity</h3>
+                    <Users className="h-4 w-4 text-people" />
+                    <h3 className="text-sm font-semibold">Contributor Activity</h3>
                   </div>
                   <div className="space-y-3">
                     {mergedSkillMap.people
@@ -838,7 +838,7 @@ export default function Home() {
                               </div>
                               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                                 <div
-                                  className="h-full rounded-full bg-muted-foreground/40 transition-all"
+                                  className="h-full rounded-full bg-people transition-all duration-500 group-hover:brightness-110"
                                   style={{ width: `${pct}%` }}
                                 />
                               </div>
@@ -850,9 +850,10 @@ export default function Home() {
                 </div>
 
                 {/* Skill Dimension Distribution */}
-                <div className="rounded-xl border bg-card p-5">
+                <div className="rounded-xl border bg-card p-5 shadow-soft animate-fade-in-up stagger-2">
                   <div className="flex items-center gap-2 mb-4">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Skill Dimension Distribution</h3>
+                    <Boxes className="h-4 w-4 text-methodology" />
+                    <h3 className="text-sm font-semibold">Skill Dimension Distribution</h3>
                   </div>
                   <div className="space-y-3">
                     {[
@@ -872,11 +873,11 @@ export default function Home() {
                           <div className="h-2 rounded-full bg-muted overflow-hidden flex">
                             {dim.items.slice(0, 8).map((item, i) => {
                               const width = totalScore > 0 ? (item.score / totalScore) * 100 : 0;
-                              const opacityCls = i === 0 ? "opacity-100" : "opacity-60";
+                              const opacityCls = ["opacity-100", "opacity-90", "opacity-80", "opacity-70", "opacity-60", "opacity-50", "opacity-40", "opacity-30"][i] ?? "opacity-30";
                               return (
                                 <div
                                   key={item.name}
-                                  className={cn(dim.color, "first:rounded-l-full last:rounded-r-full transition-all", opacityCls)}
+                                  className={cn(dim.color, "first:rounded-l-full last:rounded-r-full transition-all hover:brightness-110", opacityCls)}
                                   style={{ width: `${Math.max(width, 1)}%` }}
                                   title={`${item.name}: ${item.score.toFixed(1)} score · ${item.commits} commits · ${item.people} people`}
                                 />
@@ -928,7 +929,7 @@ export default function Home() {
             )}
           </TabsContent>
 
-          <TabsContent value="assign">
+          <TabsContent value="match">
             {mergedSkillMap ? (
               <ProblemMatchPanel
                 skillMap={mergedSkillMap}
@@ -938,8 +939,8 @@ export default function Home() {
             ) : (
               <EmptyState
                 icon={<Crosshair className="h-6 w-6" />}
-                title="No assignment data yet"
-                desc="Run a scan first, then describe a problem to find the best-suited contributors."
+                title="No problem match yet"
+                desc="Run a scan first, then match problem descriptions to the best-suited contributors."
                 action={{ label: "Go to Scan", onClick: () => setActiveTab("scan") }}
               />
             )}
@@ -958,7 +959,7 @@ export default function Home() {
               <span>Skill Attribution</span>
             </div>
             <span className="text-border">·</span>
-            <span className="font-mono">
+            <span className="font-mono text-muted-foreground">
               {setup.llmConfig.provider} / {setup.llmConfig.model ?? "auto"}
             </span>
             <span className="hidden md:inline text-border">·</span>
@@ -1038,11 +1039,13 @@ export default function Home() {
 /*  Sub-components                                                     */
 /* ------------------------------------------------------------------ */
 
-function FeatureChip({ icon, title, desc, accent }: { icon: React.ReactNode; title: string; desc: string; accent: string }) {
+function FeatureChip({ icon, title, desc, gradient }: { icon: React.ReactNode; title: string; desc: string; gradient: string }) {
   return (
-    <div className={cn("p-4 pl-4 border-l-2", accent)}>
+    <div className="rounded-xl border bg-card p-4 card-elevated animate-fade-in-up hover:shadow-md transition-shadow ring-1 ring-border/30">
       <div className="flex items-center gap-2.5 mb-1.5">
-        <span className="text-muted-foreground">{icon}</span>
+        <div className={`h-8 w-8 rounded-lg ${gradient} flex items-center justify-center text-white shrink-0`}>
+          {icon}
+        </div>
         <span className="text-xs font-semibold">{title}</span>
       </div>
       <div className="text-[11px] text-muted-foreground leading-relaxed">{desc}</div>
@@ -1050,11 +1053,14 @@ function FeatureChip({ icon, title, desc, accent }: { icon: React.ReactNode; tit
   );
 }
 
-function QuickStat({ label, value }: { label: string; value: number }) {
+function QuickStat({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: string }) {
   return (
-    <div className="px-4 py-2.5 text-center">
-      <div className="text-lg font-bold tabular-nums text-foreground">{value}</div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</p>
+    <div className="rounded-lg bg-muted/30 px-3 py-2 text-center hover:bg-muted/50 transition-colors ring-1 ring-border/30">
+      <div className={`flex items-center justify-center gap-1 ${color}`}>
+        {icon}
+        <span className="text-lg font-bold tabular-nums">{value}</span>
+      </div>
+      <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
     </div>
   );
 }
@@ -1071,14 +1077,14 @@ function EmptyState({
   action?: { label: string; onClick: () => void };
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto">
-      <div className="text-muted-foreground mb-3">
+    <div className="flex flex-col items-center justify-center py-16 text-center max-w-md mx-auto animate-fade-in-up">
+      <div className="h-14 w-14 rounded-full bg-muted/60 flex items-center justify-center text-muted-foreground mb-3 ring-1 ring-border/50 card-glow">
         {icon}
       </div>
       <div className="text-sm font-medium">{title}</div>
       <div className="text-xs text-muted-foreground mt-0.5 mb-4">{desc}</div>
       {action && (
-        <Button size="sm" variant="outline" onClick={action.onClick}>
+        <Button size="sm" onClick={action.onClick} className="active-scale">
           {action.label}
         </Button>
       )}
@@ -1175,11 +1181,11 @@ function PeopleTable({
   };
 
   return (
-    <div className="border overflow-hidden bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 p-3 border-b">
+    <div className="rounded-xl border overflow-hidden bg-card shadow-soft animate-fade-in-up">
+      <div className="flex flex-wrap items-center justify-between gap-3 p-3 border-b bg-muted/30">
         <div className="text-[11px] text-muted-foreground">
           <span className="font-medium text-foreground">{filteredPeople.length}</span>
-          {query && <span> of {skillMap.people.length}</span>} contributors
+          {query && <span> of {skillMap.people.length}</span>} contributors · click a row to inspect
         </div>
         <div className="flex items-center gap-2">
           <div className="relative">
@@ -1193,7 +1199,7 @@ function PeopleTable({
               id="people-search-input"
             />
           </div>
-          <Button size="sm" variant="ghost" onClick={exportCsv} className="h-7 text-[11px] gap-1.5">
+          <Button size="sm" variant="outline" onClick={exportCsv} className="h-7 text-[11px] gap-1.5 active-scale">
             <Download className="h-3 w-3" /> CSV
           </Button>
         </div>
@@ -1226,11 +1232,11 @@ function PeopleTable({
               >
                 Repos {renderSortIcon(sortKey === "repos")}
               </th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[160px]">Sectors</th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[180px]">Problem Types</th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[160px]">Tech</th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[170px]">Methodologies</th>
-              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-muted-foreground min-w-[170px]">Roles</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-sector min-w-[160px]">Sectors</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-problem min-w-[180px]">Problem Types</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-tech min-w-[160px]">Tech</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-methodology min-w-[170px]">Methodologies</th>
+              <th className="p-3 font-medium text-[10px] uppercase tracking-wide text-role min-w-[170px]">Roles</th>
             </tr>
           </thead>
           <tbody>
@@ -1261,7 +1267,13 @@ function PeopleTable({
                     </div>
                   </td>
                   <td className="p-3">
-                    <div className="font-mono tabular-nums text-muted-foreground">{p.totalCommits}</div>
+                    <div className="font-mono font-semibold tabular-nums">{p.totalCommits}</div>
+                    <div className="mt-1 h-1 rounded-full bg-muted overflow-hidden w-[80px]">
+                      <div
+                        className="h-full bg-people transition-all group-hover:brightness-110"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
                   </td>
                   <td className="p-3 font-mono tabular-nums text-muted-foreground">{p.totalChunks}</td>
                   <td className="p-3 font-mono tabular-nums text-muted-foreground">{p.repos.length}</td>
@@ -1322,9 +1334,9 @@ function PeopleTable({
                 </div>
               </div>
 
-              {/* Commit bar — muted */}
+              {/* Commit bar */}
               <div className="h-1 rounded-full bg-muted overflow-hidden mb-2.5">
-                <div className="h-full bg-muted-foreground/30" style={{ width: `${pct}%` }} />
+                <div className="h-full bg-people" style={{ width: `${pct}%` }} />
               </div>
 
               {/* Stats row */}
@@ -1342,19 +1354,19 @@ function PeopleTable({
               {/* Skill chips — compact */}
               {p.sectors.length > 0 && (
                 <div className="mb-1.5">
-                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Sectors</div>
+                  <div className="text-[9px] uppercase tracking-wide text-sector font-semibold mb-1">Sectors</div>
                   <SkillChipList items={p.sectors} variant="sector" max={2} />
                 </div>
               )}
               {p.tech.length > 0 && (
                 <div className="mb-1.5">
-                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Tech</div>
+                  <div className="text-[9px] uppercase tracking-wide text-tech font-semibold mb-1">Tech</div>
                   <SkillChipList items={p.tech} variant="tech" max={3} />
                 </div>
               )}
               {p.roles.length > 0 && (
                 <div>
-                  <div className="text-[9px] uppercase tracking-wide text-muted-foreground font-medium mb-1">Roles</div>
+                  <div className="text-[9px] uppercase tracking-wide text-role font-semibold mb-1">Roles</div>
                   <SkillChipList items={p.roles} variant="role" max={2} />
                 </div>
               )}
@@ -1388,11 +1400,11 @@ function SkillChipList({
   const shown = items.slice(0, max);
   const overflow = items.length - shown.length;
   const cls: Record<SkillVariant, string> = {
-    sector: "border-border text-muted-foreground",
-    problem: "border-border text-muted-foreground",
-    tech: "border-border text-muted-foreground",
-    methodology: "border-border text-muted-foreground",
-    role: "border-border text-muted-foreground",
+    sector: "border-sector/40 text-sector bg-sector/10",
+    problem: "border-problem/40 text-problem bg-problem/10",
+    tech: "border-tech/40 text-tech bg-tech/10",
+    methodology: "border-methodology/40 text-methodology bg-methodology/10",
+    role: "border-role/40 text-role bg-role/10",
   };
   return (
     <div className="flex flex-wrap gap-1 max-w-[260px]">
@@ -1607,20 +1619,23 @@ function InsightsPanel({
     return out;
   }, [skillMap, onSelectPerson]);
 
-  const severityStyles: Record<Insight["severity"], { border: string; icon: React.ReactNode; label: string }> = {
+  const severityStyles: Record<Insight["severity"], { border: string; bg: string; icon: React.ReactNode; label: string }> = {
     info: {
-      border: "border-l-muted-foreground/40",
-      icon: <Lightbulb className="h-4 w-4 text-muted-foreground" />,
+      border: "border-l-people/60",
+      bg: "bg-people/5",
+      icon: <Lightbulb className="h-4 w-4 text-people" />,
       label: "Info",
     },
     warning: {
-      border: "border-l-muted-foreground/60",
-      icon: <Target className="h-4 w-4 text-muted-foreground" />,
+      border: "border-l-sector/70",
+      bg: "bg-sector/5",
+      icon: <Target className="h-4 w-4 text-sector" />,
       label: "Watch",
     },
     success: {
-      border: "border-l-muted-foreground/40",
-      icon: <TrendingUp className="h-4 w-4 text-muted-foreground" />,
+      border: "border-l-tech/60",
+      bg: "bg-tech/5",
+      icon: <TrendingUp className="h-4 w-4 text-tech" />,
       label: "Strength",
     },
   };
@@ -1641,28 +1656,33 @@ function InsightsPanel({
   }), [insights]);
 
   return (
-    <div className="space-y-4">
-      {/* Header with summary */}
-      <div className="border-b pb-4">
+    <div className="space-y-5 animate-fade-in-up">
+      {/* Header card with summary */}
+      <div className="rounded-xl border bg-card p-5 shadow-soft">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div>
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Skill Insights</h3>
-            <p className="text-[11px] text-muted-foreground mt-1">
-              Auto-generated from the {skillMap.totalPeople}-person, {skillMap.totalCommits}-commit scan of <span className="font-mono">{skillMap.org}</span>. Heuristic recommendations — use judgment when acting on them.
+            <div className="flex items-center gap-2 mb-1">
+              <div className="h-7 w-7 rounded-lg gradient-methodology flex items-center justify-center">
+                <Lightbulb className="h-4 w-4 text-white" />
+              </div>
+              <h3 className="text-sm font-semibold">Skill Insights & Recommendations</h3>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              Auto-generated from the {skillMap.totalPeople}-person, {skillMap.totalCommits}-commit scan of <span className="font-mono">{skillMap.org}</span>. These are heuristic recommendations — use judgment when acting on them.
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-3 gap-4 divide-x divide-border">
-          <div className="px-3 text-center first:pl-0">
-            <div className="text-lg font-bold tabular-nums">{counts.warning}</div>
+        <div className="grid grid-cols-3 gap-2 mt-4">
+          <div className="rounded-lg border border-sector/30 bg-sector/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-sector">{counts.warning}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Watch</div>
           </div>
-          <div className="px-3 text-center">
-            <div className="text-lg font-bold tabular-nums">{counts.info}</div>
+          <div className="rounded-lg border border-people/30 bg-people/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-people">{counts.info}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Info</div>
           </div>
-          <div className="px-3 text-center">
-            <div className="text-lg font-bold tabular-nums">{counts.success}</div>
+          <div className="rounded-lg border border-tech/30 bg-tech/5 p-2.5 text-center">
+            <div className="text-xl font-bold tabular-nums text-tech">{counts.success}</div>
             <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Strengths</div>
           </div>
         </div>
@@ -1676,9 +1696,11 @@ function InsightsPanel({
             <div
               key={insight.id}
               className={cn(
-                "border border-l-4 bg-card p-4",
-                style.border
+                "rounded-xl border border-l-4 bg-card p-4 shadow-soft animate-fade-in-up hover:shadow-md transition-shadow",
+                style.border,
+                style.bg
               )}
+              style={{ animationDelay: `${Math.min(i * 50, 400)}ms` }}
             >
               <div className="flex items-start gap-3">
                 <div className="shrink-0 mt-0.5">{style.icon}</div>
@@ -1705,8 +1727,8 @@ function InsightsPanel({
                   {insight.actionLabel && insight.onAction && (
                     <Button
                       size="sm"
-                      variant="ghost"
-                      className="mt-3 h-6 text-[11px]"
+                      variant="outline"
+                      className="mt-3 h-6 text-[11px] active-scale"
                       onClick={insight.onAction}
                     >
                       {insight.actionLabel} <ArrowRight className="h-3 w-3 ml-1" />
@@ -1718,8 +1740,8 @@ function InsightsPanel({
           );
         })}
         {insights.length === 0 && (
-          <div className="border-t pt-6 text-center">
-            <Lightbulb className="h-6 w-6 text-muted-foreground/30 mx-auto mb-2" />
+          <div className="rounded-xl border bg-card p-8 text-center">
+            <Lightbulb className="h-8 w-8 text-muted-foreground/50 mx-auto mb-2" />
             <p className="text-sm text-muted-foreground">No insights to surface yet. Run a deeper scan for more data.</p>
           </div>
         )}
